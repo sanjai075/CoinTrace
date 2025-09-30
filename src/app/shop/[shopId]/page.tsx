@@ -1,4 +1,4 @@
-import { addStaffToShop } from '@/app/actions/staff';
+import { addStaffToShop, removeStaffFromShop } from '@/app/actions/staff';
 import { stackServerApp } from '@/stack/server';
 import { PrismaClient } from '@prisma/client';
 import AddBillClient from './AddBillClient';
@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 
 type StaffItem = { user: { id: string; email: string | null } };
 
-function StaffList({ staff }: { staff: StaffItem[] }) {
+function StaffList({ staff, isOwner, shopId }: { staff: StaffItem[]; isOwner?: boolean; shopId?: string }) {
   if (staff.length === 0) {
     return <p className="text-gray-400">No staff members yet.</p>;
   }
@@ -16,7 +16,21 @@ function StaffList({ staff }: { staff: StaffItem[] }) {
       {staff.map(({ user }) => (
         <div key={user.id} className="flex items-center justify-between p-3 bg-gray-700 rounded-md">
           <span className="text-gray-200">{user.email}</span>
-          <span className="text-xs px-2 py-1 bg-blue-800 text-blue-200 rounded-full">Staff</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs px-2 py-1 bg-blue-800 text-blue-200 rounded-full">Staff</span>
+            {isOwner && shopId && (
+              <form action={removeStaffFromShop}>
+                <input type="hidden" name="shopId" value={shopId} />
+                <input type="hidden" name="userId" value={user.id} />
+                <button
+                  type="submit"
+                  className="text-xs px-2 py-1 rounded-md bg-rose-700 hover:bg-rose-800 text-white"
+                >
+                  Remove
+                </button>
+              </form>
+            )}
+          </div>
         </div>
       ))}
     </div>
@@ -44,16 +58,13 @@ function AddStaffForm({ shopId }: { shopId: string }) {
   );
 }
 
-export default async function ShopPage({
-  params,
-  searchParams,
-}: {
-  params: { shopId: string };
-  searchParams?: { [key: string]: string | string[] | undefined };
+export default async function ShopPage(props: {
+  params: Promise<{ shopId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { shopId } = await props.params;
+  const searchParams = await props.searchParams;
   const user = await stackServerApp.getUser({ or: 'throw' });
-
-  const shopId = params?.shopId;
   if (!shopId || typeof shopId !== 'string') {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-24">
@@ -79,6 +90,22 @@ export default async function ShopPage({
   }
 
   const isOwner = user.id === shop.ownerId;
+
+  // UI notices from server actions (e.g., add staff)
+  const notice = (searchParams?.notice as string) || null;
+  const status = (searchParams?.status as string) || null;
+  const bannerClass = (() => {
+    switch (status) {
+      case 'success':
+        return 'bg-emerald-900/60 text-emerald-200 border border-emerald-700';
+      case 'warning':
+        return 'bg-amber-900/60 text-amber-200 border border-amber-700';
+      case 'error':
+        return 'bg-rose-900/60 text-rose-200 border border-rose-700';
+      default:
+        return 'bg-slate-800/60 text-slate-200 border border-slate-700';
+    }
+  })();
 
   // Timezone helpers (IST: Asia/Kolkata, UTC+5:30)
   const IST_OFFSET_MINUTES = 330; // 5.5 hours
@@ -136,18 +163,9 @@ export default async function ShopPage({
   const startMonth = startOfMonthISTUTC(now);
 
     const [sumToday, sumWeek, sumMonth] = await Promise.all([
-      prisma.billEntry.aggregate({
-        _sum: { amount: true },
-        where: { bill: { shopId }, createdAt: { gte: startToday } },
-      }),
-      prisma.billEntry.aggregate({
-        _sum: { amount: true },
-        where: { bill: { shopId }, createdAt: { gte: startWeek } },
-      }),
-      prisma.billEntry.aggregate({
-        _sum: { amount: true },
-        where: { bill: { shopId }, createdAt: { gte: startMonth } },
-      }),
+      prisma.billEntry.aggregate({ _sum: { amount: true }, where: { bill: { is: { shopId } }, createdAt: { gte: startToday } } }),
+      prisma.billEntry.aggregate({ _sum: { amount: true }, where: { bill: { is: { shopId } }, createdAt: { gte: startWeek } } }),
+      prisma.billEntry.aggregate({ _sum: { amount: true }, where: { bill: { is: { shopId } }, createdAt: { gte: startMonth } } }),
     ]);
 
     totals = {
@@ -156,6 +174,7 @@ export default async function ShopPage({
       monthToDate: sumMonth._sum.amount ?? 0,
     };
 
+    
     // Specific date total
     const dateStr = (searchParams?.date as string) || undefined;
     const dateStartUTC = parseISODateToISTStartUTC(dateStr);
@@ -163,17 +182,14 @@ export default async function ShopPage({
       dateSelected = dateStr!;
       const start = dateStartUTC;
       const endExcl = nextDayUTCFromISTStart(dateStartUTC);
-      const agg = await prisma.billEntry.aggregate({
-        _sum: { amount: true },
-        where: { bill: { shopId }, createdAt: { gte: start, lt: endExcl } },
-      });
+      const agg = await prisma.billEntry.aggregate({ _sum: { amount: true }, where: { bill: { is: { shopId } }, createdAt: { gte: start, lt: endExcl } } });
       specificDateTotal = agg._sum.amount ?? 0;
 
       // Optional: list entries when requested
       showEntries = (searchParams?.showEntries as string) === '1';
       if (showEntries) {
         const entries = await prisma.billEntry.findMany({
-          where: { bill: { shopId }, createdAt: { gte: start, lt: endExcl } },
+          where: { bill: { is: { shopId } }, createdAt: { gte: start, lt: endExcl } },
           select: { amount: true },
           orderBy: { createdAt: 'asc' },
         });
@@ -195,10 +211,7 @@ export default async function ShopPage({
         rangeSelected = { from: fromStr!, to: toStr! };
         const start = from;
         const endExcl = nextDayUTCFromISTStart(to);
-        const agg = await prisma.billEntry.aggregate({
-          _sum: { amount: true },
-          where: { bill: { shopId }, createdAt: { gte: start, lt: endExcl } },
-        });
+        const agg = await prisma.billEntry.aggregate({ _sum: { amount: true }, where: { bill: { is: { shopId } }, createdAt: { gte: start, lt: endExcl } } });
         rangeTotal = agg._sum.amount ?? 0;
       }
     }
@@ -207,6 +220,11 @@ export default async function ShopPage({
   return (
     <main className="flex min-h-screen flex-col items-center p-8 md:p-24 bg-gray-900 text-white">
       <div className="w-full max-w-4xl p-8 space-y-8 bg-gray-800 rounded-lg shadow-lg">
+        {notice && (
+          <div className={`p-3 rounded-md text-sm ${bannerClass}`}>
+            {notice}
+          </div>
+        )}
         {/* Shop Header */}
         <div className="border-b border-gray-700 pb-4">
           <h1 className="text-4xl font-bold">Welcome to {shop.name}</h1>
@@ -320,7 +338,7 @@ export default async function ShopPage({
               </details>
             </div>
             <div className="p-6 bg-gray-900/50 rounded-lg">
-              <StaffList staff={shop.staffMemberships as unknown as StaffItem[]} />
+              <StaffList staff={shop.staffMemberships as unknown as StaffItem[]} isOwner shopId={shop.id} />
             </div>
           </div>
         ) : (
