@@ -41,3 +41,30 @@ export async function createShop(formData: FormData) {
   revalidatePath('/');
   redirect(`/shop/${shop.id}`);
 }
+
+export async function getShopsForUser() {
+  const user = await stackServerApp.getUser();
+
+  if (!user) {
+    return { ownedShops: [], staffShops: [] };
+  }
+
+  const ownedShops = await prisma.shop.findMany({
+    where: {
+      ownerId: user.id,
+    },
+  });
+
+  const staffMemberships = await prisma.staffMembership.findMany({
+    where: {
+      userId: user.id,
+    },
+    include: {
+      shop: true,
+    },
+  });
+
+  const staffShops = staffMemberships.map((m) => m.shop);
+
+  return { ownedShops, staffShops };
+}
