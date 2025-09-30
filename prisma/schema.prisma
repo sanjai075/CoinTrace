@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String            @id
+  email            String            @unique
+  name             String?
+  role             Role              @default(STAFF)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  bills            Bill[]
+  ownedShops       Shop[]            @relation("ShopOwner")
+  staffMemberships StaffMembership[]
+}
+
+model Shop {
+  id               String            @id @default(cuid())
+  name             String
+  ownerId          String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  bills            Bill[]
+  owner            User              @relation("ShopOwner", fields: [ownerId], references: [id])
+  staffMemberships StaffMembership[]
+
+  @@index([ownerId])
+}
+
+model StaffMembership {
+  id        String   @id @default(cuid())
+  shopId    String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  shop      Shop     @relation(fields: [shopId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([shopId, userId])
+  @@index([userId])
+}
+
+model Bill {
+  id        String      @id @default(cuid())
+  shopId    String
+  staffId   String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  shop      Shop        @relation(fields: [shopId], references: [id])
+  staff     User        @relation(fields: [staffId], references: [id])
+  entries   BillEntry[]
+
+  @@index([shopId])
+  @@index([staffId])
+}
+
+model BillEntry {
+  id        String   @id @default(cuid())
+  billId    String
+  amount    Float
+  createdAt DateTime @default(now())
+  bill      Bill     @relation(fields: [billId], references: [id])
+
+  @@index([billId])
+}
+
+enum Role {
+  OWNER
+  STAFF
+}

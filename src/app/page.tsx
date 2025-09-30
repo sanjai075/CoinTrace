@@ -1,8 +1,40 @@
-import Image from "next/image";
+'use client';
+
+import { useUser } from '@stackframe/stack';
+import Image from 'next/image';
 
 export default function Home() {
+  const user = useUser();
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
+    <div className="font-sans grid grid-rows-[auto_1fr_auto] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
+      <header className="w-full flex justify-end">
+        {user ? (
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600">Welcome, {user.displayName || user.primaryEmail}</span>
+            <a
+              href="/shop/create"
+              className="rounded-full bg-green-600 text-white px-4 py-2 text-sm font-medium hover:bg-green-700 transition-colors"
+            >
+              Create Shop
+            </a>
+            <button
+              onClick={() => user.signOut()}
+              className="rounded-full bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700 transition-colors"
+            >
+              Sign Out
+            </button>
+          </div>
+        ) : (
+          <a
+            href="/handler/sign-in"
+            className="rounded-full bg-blue-600 text-white px-4 py-2 text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            Sign In
+          </a>
+        )}
+      </header>
+
       <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
         <Image
           className="dark:invert"
@@ -14,7 +46,7 @@ export default function Home() {
         />
         <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
           <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
+            Get started by editing{' '}
             <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
               src/app/page.tsx
             </code>
