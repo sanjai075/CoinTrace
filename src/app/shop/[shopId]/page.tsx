@@ -2,6 +2,7 @@ import { addStaffToShop, removeStaffFromShop } from '@/app/actions/staff';
 import { stackServerApp } from '@/stack/server';
 import { PrismaClient } from '@prisma/client';
 import AddBillClient from './AddBillClient';
+import TotalsClient from './TotalsClient';
 
 const prisma = new PrismaClient();
 
@@ -148,13 +149,7 @@ export default async function ShopPage(props: {
 
   // Owner-only analytics
   let totals: { today: number; weekToDate: number; monthToDate: number } | null = null;
-  let specificDateTotal: number | null = null;
-  let rangeTotal: number | null = null;
-  let rangeError: string | null = null;
-  let dateSelected: string | null = null;
-  let rangeSelected: { from: string; to: string } | null = null;
-  let showEntries = false;
-  let dateEntryAmounts: number[] = [];
+  // Client-side totals fetch replaces server GET forms; keep only overview on server
 
   if (isOwner) {
   const now = new Date();
@@ -175,46 +170,7 @@ export default async function ShopPage(props: {
     };
 
     
-    // Specific date total
-    const dateStr = (searchParams?.date as string) || undefined;
-    const dateStartUTC = parseISODateToISTStartUTC(dateStr);
-    if (dateStartUTC) {
-      dateSelected = dateStr!;
-      const start = dateStartUTC;
-      const endExcl = nextDayUTCFromISTStart(dateStartUTC);
-      const agg = await prisma.billEntry.aggregate({ _sum: { amount: true }, where: { bill: { is: { shopId } }, createdAt: { gte: start, lt: endExcl } } });
-      specificDateTotal = agg._sum.amount ?? 0;
-
-      // Optional: list entries when requested
-      showEntries = (searchParams?.showEntries as string) === '1';
-      if (showEntries) {
-        const entries = await prisma.billEntry.findMany({
-          where: { bill: { is: { shopId } }, createdAt: { gte: start, lt: endExcl } },
-          select: { amount: true },
-          orderBy: { createdAt: 'asc' },
-        });
-        dateEntryAmounts = entries.map((e: { amount: number }) => e.amount);
-      }
-    }
-
-    // Date range total
-    const fromStr = (searchParams?.from as string) || undefined;
-    const toStr = (searchParams?.to as string) || undefined;
-    const from = parseISODateToISTStartUTC(fromStr);
-    const to = parseISODateToISTStartUTC(toStr);
-    if (fromStr || toStr) {
-      if (!from || !to) {
-        rangeError = 'Please provide both From and To dates in YYYY-MM-DD format.';
-      } else if (from > to) {
-        rangeError = 'From date must be on or before To date.';
-      } else {
-        rangeSelected = { from: fromStr!, to: toStr! };
-        const start = from;
-        const endExcl = nextDayUTCFromISTStart(to);
-        const agg = await prisma.billEntry.aggregate({ _sum: { amount: true }, where: { bill: { is: { shopId } }, createdAt: { gte: start, lt: endExcl } } });
-        rangeTotal = agg._sum.amount ?? 0;
-      }
-    }
+    // Specific-date and range totals will be requested via client without full navigation
   }
 
   return (
@@ -254,71 +210,10 @@ export default async function ShopPage(props: {
               </div>
             </div>
 
-            {/* Insights: pick a date or range */}
+            {/* Insights: now fetched client-side to avoid full-page navigation */}
             <div className="space-y-6">
               <h3 className="text-xl font-semibold">Insights</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Specific Date */}
-                <div className="p-4 bg-gray-900/50 rounded-lg">
-                  <form method="GET" className="space-y-3">
-                    <div className="flex items-end gap-2">
-                      <label className="flex-1">
-                        <span className="block text-sm text-gray-400 mb-1">Specific Date</span>
-                        <input type="date" name="date" defaultValue={(searchParams?.date as string) || ''} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md" />
-                      </label>
-                      <button type="submit" className="px-3 py-2 rounded-md bg-indigo-600 text-white text-sm">Get Total</button>
-                      <a href={`/shop/${shop.id}`} className="px-3 py-2 rounded-md bg-gray-700 text-gray-200 text-sm">Clear</a>
-                      {dateSelected && !showEntries && (
-                        <a href={`/shop/${shop.id}?date=${dateSelected}&showEntries=1`} className="px-3 py-2 rounded-md bg-emerald-700 text-white text-sm">View entries</a>
-                      )}
-                      {dateSelected && showEntries && (
-                        <a href={`/shop/${shop.id}?date=${dateSelected}`} className="px-3 py-2 rounded-md bg-emerald-900 text-white text-sm">Hide entries</a>
-                      )}
-                    </div>
-                  </form>
-                  {dateSelected !== null && (
-                    <p className="mt-3 text-gray-300">Total for {dateSelected}: <span className="font-semibold">₹{(specificDateTotal ?? 0).toFixed(2)}</span></p>
-                  )}
-                  {dateSelected && showEntries && (
-                    <div className="mt-3 text-gray-300 text-sm space-y-1">
-                      {dateEntryAmounts.length > 0 ? (
-                        <>
-                          <p className="break-words">{dateEntryAmounts.join(' + ')} +</p>
-                          <p>
-                            Entries: <span className="font-semibold">{dateEntryAmounts.length}</span> · Total: <span className="font-semibold">₹{dateEntryAmounts.reduce((a, b) => a + b, 0).toFixed(2)}</span>
-                          </p>
-                        </>
-                      ) : (
-                        <p>No entries for this date.</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Date Range */}
-                <div className="p-4 bg-gray-900/50 rounded-lg">
-                  <form method="GET" className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <label>
-                        <span className="block text-sm text-gray-400 mb-1">From</span>
-                        <input type="date" name="from" defaultValue={(searchParams?.from as string) || ''} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md" />
-                      </label>
-                      <label>
-                        <span className="block text-sm text-gray-400 mb-1">To</span>
-                        <input type="date" name="to" defaultValue={(searchParams?.to as string) || ''} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md" />
-                      </label>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="submit" className="px-3 py-2 rounded-md bg-indigo-600 text-white text-sm">Get Total</button>
-                      <a href={`/shop/${shop.id}`} className="px-3 py-2 rounded-md bg-gray-700 text-gray-200 text-sm">Clear</a>
-                    </div>
-                  </form>
-                  {rangeError && <p className="mt-3 text-red-400 text-sm">{rangeError}</p>}
-                  {rangeSelected && !rangeError && (
-                    <p className="mt-3 text-gray-300">Total for {rangeSelected.from} to {rangeSelected.to}: <span className="font-semibold">₹{(rangeTotal ?? 0).toFixed(2)}</span></p>
-                  )}
-                </div>
-              </div>
+              <TotalsClient shopId={shop.id} />
             </div>
           </div>
         )}

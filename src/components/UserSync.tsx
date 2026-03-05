@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser } from '@stackframe/stack';
+import { useStackApp, useUser } from '@stackframe/stack';
 import { useEffect, useState } from 'react';
 import { syncUser } from '@/app/actions/user';
 
@@ -10,6 +10,7 @@ import { syncUser } from '@/app/actions/user';
  * of your layout so it runs whenever a user is logged in.
  */
 export default function UserSync() {
+  const stackApp = useStackApp();
   const user = useUser();
   const [hasSynced, setHasSynced] = useState(false);
 
@@ -17,6 +18,8 @@ export default function UserSync() {
     // Only run the sync process if:
     // 1. We have a user object.
     // 2. We haven't already tried to sync for this session.
+    console.log('UserSync useEffect triggered:', { hasUser: !!user, hasSynced });
+    
     if (user && !hasSynced) {
       console.log('Authenticated user detected. Triggering database sync...');
       setHasSynced(true); // Mark as synced to prevent re-running on every render
