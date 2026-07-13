@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { stackServerApp } from "@/stack/server";
 
-const prisma = new PrismaClient();
 
 // Timezone helpers (IST: Asia/Kolkata, UTC+5:30)
 const IST_OFFSET_MINUTES = 330; // 5.5 hours
@@ -27,14 +26,12 @@ type DatePayload = { kind: "date"; date: string; includeEntries?: boolean };
 type RangePayload = { kind: "range"; from: string; to: string };
 type Payload = DatePayload | RangePayload;
 
-export async function POST(req: NextRequest, {
-  params,
-}: {
-  params: { shopId: string };
+export async function POST(req: NextRequest, context: {
+  params: Promise<{ shopId: string }>;
 }) {
   try {
     const user = await stackServerApp.getUser({ or: "throw" });
-    const { shopId } = params;
+    const { shopId } = await context.params;
     if (!shopId) {
       return NextResponse.json({ ok: false, error: "Missing shopId" }, { status: 400 });
     }

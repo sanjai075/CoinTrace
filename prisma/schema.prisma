@@ -7,16 +7,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  OWNER
+  STAFF
+}
+
+enum SaleType {
+  CASH
+  UPI
+  CREDIT
+}
+
+enum CustomerTxType {
+  CREDIT_SALE
+  PAYMENT_RCVD
+}
+
+enum SupplierTxType {
+  CREDIT_PURCHASE
+  PAYMENT_PAID
+}
+
+enum ExpenseCategory {
+  PURCHASE_FROM_SUPPLIER
+  ELECTRICITY
+  RENT
+  TRANSPORT
+  SALARY
+  OTHERS
+}
+
 model User {
   id               String            @id
   email            String            @unique
   name             String?
   role             Role              @default(STAFF)
+  trialEndsAt      DateTime          @default(dbgenerated("NOW() + interval '15 days'"))
+  subscriptionPlan String            @default("FREE") // FREE, ONE_SHOP, TWO_SHOPS, THREE_PLUS
+  subscriptionEnds DateTime?
+  razorpaySubId    String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   bills            Bill[]
   ownedShops       Shop[]            @relation("ShopOwner")
   staffMemberships StaffMembership[]
+  salesAdded       Sale[]            @relation("StaffSales")
 }
 
 model Shop {
@@ -28,6 +63,14 @@ model Shop {
   bills            Bill[]
   owner            User              @relation("ShopOwner", fields: [ownerId], references: [id])
   staffMemberships StaffMembership[]
+  // New features
+  workers          Worker[]
+  products         Product[]
+  customers        Customer[]
+  suppliers        Supplier[]
+  sales            Sale[]
+  expenses         Expense[]
+  stockLogs        StockAdjustmentLog[]
 
   @@index([ownerId])
 }
@@ -38,13 +81,164 @@ model StaffMembership {
   userId    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  shop      Shop     @relation(fields: [shopId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([shopId, userId])
   @@index([userId])
 }
 
+// Local workers added by owner for shared-device flow
+model Worker {
+  id        String   @id @default(cuid())
+  name      String
+  pin       String   // Encrypted/Hashed 4-digit PIN
+  shopId    String
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sales     Sale[]
+
+  @@index([shopId])
+}
+
+model Product {
+  id           String     @id @default(cuid())
+  name         String
+  sellingPrice Float
+  barcode      String?    // Optional barcode for scanning packaged goods
+  stock        Int?       // Optional stock level count (null = unlimited/untracked)
+  archived     Boolean    @default(false) // Toggle to soft-delete/archive catalog products
+  shopId       String
+  shop         Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  saleItems    SaleItem[]
+  stockLogs    StockAdjustmentLog[]
+
+  @@index([shopId])
+  @@index([shopId, barcode])
+}
+
+model StockAdjustmentLog {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shopId    String
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  staffId   String?  // Logged-in staff member or owner who made the change
+  staffName String?  // Snapshot display name of the staff member
+  oldStock  Int?
+  newStock  Int?
+  change    Int      // e.g. -5, +10
+  createdAt DateTime @default(now())
+
+  @@index([shopId])
+  @@index([productId])
+}
+
+model Customer {
+  id             String       @id @default(cuid())
+  name           String
+  phone          String?
+  shopId         String
+  shop           Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  runningBalance Float        @default(0.0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  transactions   CustomerTx[]
+  sales          Sale[]
+
+  @@index([shopId])
+}
+
+model CustomerTx {
+  id         String         @id @default(cuid())
+  customerId String
+  customer   Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type       CustomerTxType
+  amount     Float
+  saleId     String?        @unique
+  createdAt  DateTime       @default(now())
+
+  @@index([customerId])
+}
+
+model Supplier {
+  id             String       @id @default(cuid())
+  name           String
+  phone          String?
+  shopId         String
+  shop           Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  runningBalance Float        @default(0.0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  transactions   SupplierTx[]
+
+  @@index([shopId])
+}
+
+model SupplierTx {
+  id         String         @id @default(cuid())
+  supplierId String
+  supplier   Supplier       @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  type       SupplierTxType
+  amount     Float
+  createdAt  DateTime       @default(now())
+
+  @@index([supplierId])
+}
+
+model Sale {
+  id         String     @id @default(cuid())
+  shopId     String
+  shop       Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  type       SaleType
+  customerId String?
+  customer   Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  // Tracking addition source
+  staffId    String?    // Set if added via email logged-in account (Owner / invited Remote Staff)
+  staff      User?      @relation("StaffSales", fields: [staffId], references: [id], onDelete: SetNull)
+  workerId   String?    // Set if added by local PIN worker on shared device
+  worker     Worker?    @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  workerName String?    // Snapshotted display name for reports (e.g. Kumar or email address)
+  total      Float
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  items      SaleItem[]
+
+  @@index([shopId])
+  @@index([customerId])
+}
+
+model SaleItem {
+  id        String   @id @default(cuid())
+  saleId    String
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Float
+  price     Float
+  createdAt DateTime @default(now())
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+model Expense {
+  id        String          @id @default(cuid())
+  shopId    String
+  shop      Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  category  ExpenseCategory
+  amount    Float
+  notes     String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([shopId])
+}
+
+// Keep existing models for backward compatibility
 model Bill {
   id        String      @id @default(cuid())
   shopId    String
@@ -67,9 +261,4 @@ model BillEntry {
   bill      Bill     @relation(fields: [billId], references: [id])
 
   @@index([billId])
-}
-
-enum Role {
-  OWNER
-  STAFF
 }

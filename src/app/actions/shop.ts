@@ -1,43 +1,82 @@
 'use server';
 
 import { stackServerApp } from '@/stack/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
-const prisma = new PrismaClient();
-
-export async function createShop(formData: FormData) {
+export async function createShop(formData: FormData): Promise<{ error: string } | null> {
   const user = await stackServerApp.getUser({
-    // By default, `getUser` will not throw if the user is not authenticated.
-    // We want to throw an error in that case.
     or: 'throw',
   });
 
   const shopName = formData.get('name') as string;
 
   if (!shopName) {
-    throw new Error('Shop name is required.');
+    return { error: 'Shop name is required.' };
   }
 
-  // Ensure the user from StackAuth exists in our database
-  const dbUser = await prisma.user.findUnique({
+  // Ensure the user from StackAuth exists in our database, auto-creating them if they don't
+  let dbUser = await prisma.user.findUnique({
     where: { id: user.id },
   });
 
   if (!dbUser) {
-    // This case should ideally not be hit if UserSync is working correctly
-    throw new Error('User not found in database. Please sign out and sign in again.');
+    dbUser = await prisma.user.create({
+      data: {
+        id: user.id,
+        email: user.primaryEmail || '',
+        name: user.displayName || 'Owner',
+        role: 'OWNER',
+      },
+    });
+    console.log('Automatically registered missing user during shop creation:', dbUser);
   }
 
-  const shop = await prisma.shop.create({
-    data: {
-      name: shopName,
-      ownerId: dbUser.id, // Assign the current user as the owner
-    },
+  // ----------------------------------------------------
+  // Razorpay & Trial Subscription Checks
+  // ----------------------------------------------------
+  const now = new Date();
+  const ownedShopsCount = await prisma.shop.count({
+    where: { ownerId: dbUser.id },
   });
 
-  // Invalidate caches for the homepage and redirect to the new shop's page
+  const isTrialActive = dbUser.trialEndsAt && dbUser.trialEndsAt > now;
+  const isSubscriptionActive = dbUser.subscriptionEnds && dbUser.subscriptionEnds > now;
+
+  let allowedShops = 0;
+  if (isSubscriptionActive) {
+    if (dbUser.subscriptionPlan === 'ONE_SHOP') allowedShops = 1;
+    else if (dbUser.subscriptionPlan === 'TWO_SHOPS') allowedShops = 2;
+    else if (dbUser.subscriptionPlan === 'THREE_PLUS') allowedShops = 999;
+  } else if (isTrialActive) {
+    allowedShops = 1; // 1 free shop allowed during the 15-day trial period
+  }
+
+  if (ownedShopsCount >= allowedShops) {
+    if (isSubscriptionActive) {
+      return { error: `Your subscription plan (${dbUser.subscriptionPlan}) is limited to ${allowedShops} shop(s). Please upgrade to add more.` };
+    } else if (isTrialActive) {
+      return { error: 'Trial allows only 1 shop. Please upgrade your subscription to create more.' };
+    } else {
+      return { error: 'Your free trial has expired. Please choose a subscription plan to continue.' };
+    }
+  }
+
+  // Create the shop
+  let shop;
+  try {
+    shop = await prisma.shop.create({
+      data: {
+        name: shopName,
+        ownerId: dbUser.id,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to create shop in DB:', err);
+    return { error: 'Failed to create shop. Please try again.' };
+  }
+
   revalidatePath('/');
   redirect(`/shop/${shop.id}`);
 }

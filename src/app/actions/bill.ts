@@ -1,10 +1,8 @@
 "use server";
 
 import { stackServerApp } from "@/stack/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-
-const prisma = new PrismaClient();
 
 /**
  * createBill
@@ -13,7 +11,7 @@ const prisma = new PrismaClient();
  * - Auth: user must be owner of the shop or staff member of the shop
  * - Behavior: creates Bill and BillEntry rows for each number in expression
  * - Output: none (revalidates shop page)
- */
+ * */
 export async function createBill(formData: FormData) {
   const user = await stackServerApp.getUser({ or: "throw" });
   const shopId = String(formData.get("shopId") || "").trim();
@@ -60,7 +58,7 @@ export async function createBill(formData: FormData) {
   if (amounts.length === 0) throw new Error("No valid amounts provided");
 
   // Create bill + entries in a transaction
-  await prisma.$transaction(async (tx: PrismaClient) => {
+  await prisma.$transaction(async (tx) => {
     const bill = await tx.bill.create({
       data: {
         shopId,

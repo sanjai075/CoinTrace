@@ -1,11 +1,9 @@
 'use server';
 
 import { stackServerApp } from '@/stack/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-
-const prisma = new PrismaClient();
 
 export async function addStaffToShop(formData: FormData) {
   const shopId = formData.get('shopId') as string;

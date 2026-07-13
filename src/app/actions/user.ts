@@ -1,9 +1,7 @@
 'use server';
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { stackServerApp } from '@/stack/server';
-
-const prisma = new PrismaClient();
 
 /**
  * Synchronizes the currently authenticated StackAuth user with the local Prisma database.
@@ -45,7 +43,5 @@ export async function syncUser() {
   } catch (error) {
     console.error('Failed to sync user to database:', error);
     return { error: 'Database sync failed' };
-  } finally {
-    await prisma.$disconnect();
   }
 }
