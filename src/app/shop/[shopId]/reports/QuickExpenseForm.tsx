@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
-import { Plus, X, Loader2 } from 'lucide-react';
+import { Plus, X, Loader2, ChevronDown, Check } from 'lucide-react';
 import { addExpense } from '@/app/actions/kirana';
 import { ExpenseCategory } from '@prisma/client';
 
@@ -13,6 +13,7 @@ export default function QuickExpenseForm({ shopId }: { shopId: string }) {
   const [isPending, startTransition] = useTransition();
 
   const [category, setCategory] = useState<ExpenseCategory>(ExpenseCategory.OTHERS);
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -89,18 +90,49 @@ export default function QuickExpenseForm({ shopId }: { shopId: string }) {
             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">
               {t('category')}
             </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
-              disabled={isPending}
-              className="w-full px-3 py-2 bg-gray-950 border border-gray-800 rounded-lg text-xs text-white focus:outline-none focus:border-rose-500 disabled:opacity-50"
-            >
-              {Object.values(ExpenseCategory).map((cat) => (
-                <option key={cat} value={cat}>
-                  {t(`categories.${cat}`)}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+                disabled={isPending}
+                className="w-full px-3 py-2.5 bg-gray-950 border border-gray-800 rounded-lg text-xs text-white focus:outline-none focus:border-rose-500 hover:border-gray-700 transition-all flex items-center justify-between cursor-pointer select-none disabled:opacity-50"
+              >
+                <span className="truncate">{t(`categories.${category}`)}</span>
+                <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 shrink-0 ${isCategoryDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isCategoryDropdownOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40 cursor-default" 
+                    onClick={() => setIsCategoryDropdownOpen(false)} 
+                  />
+                  <div className="absolute left-0 mt-1 bg-gray-950 border border-gray-850 rounded-lg py-1 shadow-2xl w-full z-50 overflow-hidden divide-y divide-gray-900/60 max-h-48 overflow-y-auto">
+                    {Object.values(ExpenseCategory).map((cat) => {
+                      const isSelected = cat === category;
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => {
+                            setCategory(cat);
+                            setIsCategoryDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-[11px] font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                            isSelected 
+                              ? 'text-rose-450 bg-rose-500/5' 
+                              : 'text-gray-300 hover:text-white hover:bg-gray-800/40'
+                          }`}
+                        >
+                          <span className="truncate pr-2">{t(`categories.${cat}`)}</span>
+                          {isSelected && <Check className="h-3 w-3 text-rose-450 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="space-y-1">

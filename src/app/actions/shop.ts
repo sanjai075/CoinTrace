@@ -33,6 +33,14 @@ export async function createShop(formData: FormData): Promise<{ error: string } 
     console.log('Automatically registered missing user during shop creation:', dbUser);
   }
 
+  // Block shop creation if user is staff in any shop
+  const isStaffAnywhere = await prisma.staffMembership.findFirst({
+    where: { userId: dbUser.id },
+  });
+  if (isStaffAnywhere) {
+    return { error: 'Staff members are not permitted to create shops.' };
+  }
+
   // ----------------------------------------------------
   // Razorpay & Trial Subscription Checks
   // ----------------------------------------------------

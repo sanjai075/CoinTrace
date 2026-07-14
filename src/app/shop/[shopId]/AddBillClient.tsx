@@ -407,7 +407,7 @@ export default function AddBillClient({
                           ? 'text-amber-400 font-extrabold' 
                           : 'text-indigo-400'
                   }`}>
-                    {p.stock === null ? 'Stock: Unlimited' : p.stock <= 0 ? 'Out of Stock' : `${p.stock} left`}
+                    {p.stock === null ? 'Untracked' : p.stock <= 0 ? 'Out of Stock' : `${p.stock} left`}
                   </span>
                 </div>
                 <span className="mt-2 text-xs font-bold text-emerald-400">
@@ -436,8 +436,13 @@ export default function AddBillClient({
 
           {/* Cart items list */}
           {cartItems.length === 0 ? (
-            <div className="py-12 text-center text-gray-400 text-sm">
-              Cart is empty. Tap products to add.
+            <div className="py-12 flex flex-col items-center justify-center text-center gap-3">
+              <div className="p-3 bg-gray-900 border border-gray-800 rounded-2xl text-gray-500">
+                <ShoppingCart className="h-6 w-6 text-indigo-450" />
+              </div>
+              <p className="text-xs text-gray-450 font-bold leading-relaxed max-w-[200px]">
+                Cart is empty. <br />Tap products above to add.
+              </p>
             </div>
           ) : (
             <div className="space-y-3 overflow-y-auto max-h-[220px] pr-1">

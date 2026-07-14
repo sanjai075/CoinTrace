@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition, useMemo } from 'react';
-import { Search, ShieldAlert, Check, Plus, Minus, Layers, EyeOff, Trash2, RotateCcw, ClipboardList } from 'lucide-react';
-import { updateProductStock, deleteProduct, unarchiveProduct } from '@/app/actions/kirana';
+import { Search, ShieldAlert, Check, Plus, Minus, Layers, EyeOff, Trash2, RotateCcw, ClipboardList, Store, X, Loader2, ChevronDown } from 'lucide-react';
+import { updateProductStock, deleteProduct, unarchiveProduct, getShopActiveProducts, cloneAllProducts, cloneSelectedProducts } from '@/app/actions/kirana';
 import { useTranslations } from 'next-intl';
 
 interface ProductItem {
@@ -28,10 +28,12 @@ export default function ProductsDashboardClient({
   shopId,
   initialProducts,
   initialLogs = [],
+  myShops = [],
 }: {
   shopId: string;
   initialProducts: ProductItem[];
   initialLogs?: StockLogItem[];
+  myShops?: Array<{ id: string; name: string }>;
 }) {
   const t = useTranslations();
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,6 +44,19 @@ export default function ProductsDashboardClient({
   const [localStock, setLocalStock] = useState<Record<string, string>>({});
   // Track which product is currently saving
   const [savingProductId, setSavingProductId] = useState<string | null>(null);
+
+  // Import products states
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedSourceShopId, setSelectedSourceShopId] = useState('');
+  const [importMethod, setImportMethod] = useState<'all' | 'selected' | null>(null);
+  const [isSourceDropdownOpen, setIsSourceDropdownOpen] = useState(false);
+  
+  const [sourceProducts, setSourceProducts] = useState<Array<{ id: string; name: string; barcode: string | null; sellingPrice: number }>>([]);
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  const [loadingSourceProducts, setLoadingSourceProducts] = useState(false);
+  const [sourceSearchQuery, setSourceSearchQuery] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importNotice, setImportNotice] = useState<{ message: string; isError: boolean } | null>(null);
 
   // Sub-filter for audit logs tab
   const [logFilter, setLogFilter] = useState<'all' | 'increased' | 'decreased'>('all');
@@ -58,9 +73,9 @@ export default function ProductsDashboardClient({
   const filteredProducts = useMemo(() => {
     return initialProducts.filter((p) => {
       // 1. Search Query filter
-      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (p.barcode && p.barcode.includes(searchQuery));
-      
+
       if (!matchesSearch) return false;
 
       // 2. Stock Status Tab filter
@@ -161,14 +176,156 @@ export default function ProductsDashboardClient({
     });
   };
 
+  // Other shops list for import dropdown
+  const otherShops = useMemo(() => myShops.filter((s) => s.id !== shopId), [myShops, shopId]);
+
+  const selectedSourceShop = useMemo(
+    () => otherShops.find((s) => s.id === selectedSourceShopId),
+    [otherShops, selectedSourceShopId]
+  );
+
+  // Load products when source shop is selected
+  const handleSourceShopSelect = async (sId: string) => {
+    setSelectedSourceShopId(sId);
+    setImportMethod(null);
+    setSourceProducts([]);
+    setSelectedProductIds(new Set());
+    setImportNotice(null);
+
+    if (sId) {
+      setLoadingSourceProducts(true);
+      try {
+        const prods = await getShopActiveProducts(sId);
+        setSourceProducts(prods);
+      } catch (err) {
+        console.error('Failed to load source products:', err);
+      } finally {
+        setLoadingSourceProducts(false);
+      }
+    }
+  };
+
+  // Filter out products already present in the target catalog
+  const importableProducts = useMemo(() => {
+    const existingNames = new Set(initialProducts.map((p) => p.name.toLowerCase()));
+    const existingBarcodes = new Set(initialProducts.map((p) => p.barcode).filter(Boolean));
+
+    return sourceProducts.filter((p) => {
+      const nameMatch = existingNames.has(p.name.toLowerCase());
+      const barcodeMatch = p.barcode ? existingBarcodes.has(p.barcode) : false;
+      return !nameMatch && !barcodeMatch;
+    });
+  }, [sourceProducts, initialProducts]);
+
+  // Search query within the import checklist
+  const filteredImportableProducts = useMemo(() => {
+    return importableProducts.filter((p) =>
+      p.name.toLowerCase().includes(sourceSearchQuery.toLowerCase()) ||
+      (p.barcode && p.barcode.includes(sourceSearchQuery))
+    );
+  }, [importableProducts, sourceSearchQuery]);
+
+  const toggleProductSelection = (productId: string) => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) {
+        next.delete(productId);
+      } else {
+        next.add(productId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = (filteredProds: typeof sourceProducts) => {
+    const allSelected = filteredProds.every((p) => selectedProductIds.has(p.id));
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      filteredProds.forEach((p) => {
+        if (allSelected) {
+          next.delete(p.id);
+        } else {
+          next.add(p.id);
+        }
+      });
+      return next;
+    });
+  };
+
+  const resetModalState = () => {
+    setSelectedSourceShopId('');
+    setImportMethod(null);
+    setSourceProducts([]);
+    setSelectedProductIds(new Set());
+    setSourceSearchQuery('');
+    setImportNotice(null);
+    setIsSourceDropdownOpen(false);
+  };
+
+  const handleImportAll = async () => {
+    if (!selectedSourceShopId) return;
+    setIsImporting(true);
+    setImportNotice(null);
+    try {
+      const res = await cloneAllProducts(selectedSourceShopId, shopId);
+      if (res.error) {
+        setImportNotice({ message: res.error, isError: true });
+      } else {
+        setImportNotice({ message: `Successfully imported ${res.count} products!`, isError: false });
+        setTimeout(() => {
+          setShowImportModal(false);
+          resetModalState();
+        }, 2000);
+      }
+    } catch (err) {
+      setImportNotice({ message: 'Failed to import products.', isError: true });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleImportSelected = async () => {
+    if (!selectedSourceShopId || selectedProductIds.size === 0) return;
+    setIsImporting(true);
+    setImportNotice(null);
+    try {
+      const res = await cloneSelectedProducts(selectedSourceShopId, shopId, Array.from(selectedProductIds));
+      if (res.error) {
+        setImportNotice({ message: res.error, isError: true });
+      } else {
+        setImportNotice({ message: `Successfully imported ${res.count} products!`, isError: false });
+        setTimeout(() => {
+          setShowImportModal(false);
+          resetModalState();
+        }, 2000);
+      }
+    } catch (err) {
+      setImportNotice({ message: 'Failed to import products.', isError: true });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Search & Tabs Controls */}
       <div className="p-5 bg-gray-850 border border-gray-800 rounded-2xl shadow-lg space-y-4">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-200">
-            {t('products.title')} ({initialProducts.length})
-          </h2>
+          <div className="flex items-center justify-between w-full md:w-auto gap-4">
+            <h2 className="text-lg font-bold text-gray-200">
+              {t('products.title')} ({initialProducts.length})
+            </h2>
+            {otherShops.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                className="px-3 py-1.5 bg-gray-900 border border-gray-800 hover:bg-gray-800 text-indigo-400 hover:text-indigo-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer shadow-sm select-none"
+              >
+                <ClipboardList className="h-3.5 w-3.5" />
+                Import from Shop
+              </button>
+            )}
+          </div>
 
           {/* Search Input */}
           <div className="relative w-full md:w-80">
@@ -184,68 +341,62 @@ export default function ProductsDashboardClient({
         </div>
 
         {/* Tab Switchers */}
-        <div className="flex flex-wrap gap-2 border-t border-gray-800 pt-3">
+        <div className="flex flex-nowrap md:flex-wrap gap-2 border-t border-gray-800 pt-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1">
           <button
             onClick={() => setActiveTab('all')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'all'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'bg-gray-900 text-gray-400 hover:text-gray-200 border border-gray-800'
-            }`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${activeTab === 'all'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-gray-900 text-gray-400 hover:text-gray-200 border border-gray-800'
+              }`}
           >
             All Products
           </button>
           <button
             onClick={() => setActiveTab('low')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'low'
-                ? 'bg-amber-600 text-white shadow-md'
-                : 'bg-gray-900 text-gray-400 hover:text-gray-250 border border-gray-800'
-            }`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${activeTab === 'low'
+              ? 'bg-amber-600 text-white shadow-md'
+              : 'bg-gray-900 text-gray-400 hover:text-gray-250 border border-gray-800'
+              }`}
           >
             <ShieldAlert className="h-3.5 w-3.5" />
             Low Stock
           </button>
           <button
             onClick={() => setActiveTab('out')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'out'
-                ? 'bg-rose-600 text-white shadow-md'
-                : 'bg-gray-900 text-gray-400 hover:text-gray-250 border border-gray-800'
-            }`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${activeTab === 'out'
+              ? 'bg-rose-600 text-white shadow-md'
+              : 'bg-gray-900 text-gray-400 hover:text-gray-250 border border-gray-800'
+              }`}
           >
             <Layers className="h-3.5 w-3.5" />
             Out of Stock
           </button>
           <button
             onClick={() => setActiveTab('untracked')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'untracked'
-                ? 'bg-gray-700 text-white shadow-md'
-                : 'bg-gray-900 text-gray-400 hover:text-gray-250 border border-gray-800'
-            }`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${activeTab === 'untracked'
+              ? 'bg-gray-700 text-white shadow-md'
+              : 'bg-gray-900 text-gray-400 hover:text-gray-250 border border-gray-800'
+              }`}
           >
             <EyeOff className="h-3.5 w-3.5" />
             Untracked
           </button>
           <button
             onClick={() => setActiveTab('archived')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'archived'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'bg-gray-900 text-gray-400 hover:text-gray-250 border border-gray-800'
-            }`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${activeTab === 'archived'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-gray-900 text-gray-400 hover:text-gray-250 border border-gray-800'
+              }`}
           >
             <Layers className="h-3.5 w-3.5" />
             Archived
           </button>
           <button
             onClick={() => setActiveTab('logs')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'logs'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'bg-gray-900 text-gray-400 hover:text-gray-250 border border-gray-800'
-            }`}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${activeTab === 'logs'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-gray-900 text-gray-400 hover:text-gray-250 border border-gray-800'
+              }`}
           >
             <ClipboardList className="h-3.5 w-3.5" />
             Audit Logs
@@ -270,22 +421,20 @@ export default function ProductsDashboardClient({
                   <button
                     type="button"
                     onClick={() => setLogFilter('all')}
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${
-                      logFilter === 'all'
-                        ? 'bg-gray-800 text-white shadow-sm'
-                        : 'text-gray-400 hover:text-gray-200'
-                    }`}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all ${logFilter === 'all'
+                      ? 'bg-gray-800 text-white shadow-sm'
+                      : 'text-gray-400 hover:text-gray-200'
+                      }`}
                   >
                     All
                   </button>
                   <button
                     type="button"
                     onClick={() => setLogFilter('increased')}
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 ${
-                      logFilter === 'increased'
-                        ? 'bg-emerald-950/80 text-emerald-450 border border-emerald-800/20'
-                        : 'text-gray-400 hover:text-emerald-350'
-                    }`}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 ${logFilter === 'increased'
+                      ? 'bg-emerald-950/80 text-emerald-450 border border-emerald-800/20'
+                      : 'text-gray-400 hover:text-emerald-350'
+                      }`}
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     Increased
@@ -293,11 +442,10 @@ export default function ProductsDashboardClient({
                   <button
                     type="button"
                     onClick={() => setLogFilter('decreased')}
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 ${
-                      logFilter === 'decreased'
-                        ? 'bg-rose-950/80 text-rose-450 border border-rose-800/20'
-                        : 'text-gray-400 hover:text-rose-350'
-                    }`}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all flex items-center gap-1 ${logFilter === 'decreased'
+                      ? 'bg-rose-950/80 text-rose-450 border border-rose-800/20'
+                      : 'text-gray-400 hover:text-rose-350'
+                      }`}
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                     Decreased
@@ -350,12 +498,12 @@ export default function ProductsDashboardClient({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[600px]">
               <thead>
-                <tr className="border-b border-gray-800 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                  <th className="pb-3 pl-2">Product Name</th>
-                  <th className="pb-3">Selling Price</th>
-                  <th className="pb-3">Stock Level</th>
-                  <th className="pb-3 text-right pr-4">Quick Adjust Stock</th>
-                  <th className="pb-3 text-center pr-2 w-16">Remove</th>
+                <tr className="border-b border-gray-800 text-[11px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                  <th className="pb-3 pl-2 pr-4">Product Name</th>
+                  <th className="pb-3 px-4">Selling Price</th>
+                  <th className="pb-3 px-4">Stock Level</th>
+                  <th className="pb-3 px-4 text-center">Quick Adjust Stock</th>
+                  <th className="pb-3 px-4 text-center w-16">Remove</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/60">
@@ -368,7 +516,7 @@ export default function ProductsDashboardClient({
                   return (
                     <tr key={p.id} className="hover:bg-gray-900/30 transition-colors">
                       {/* Name & Barcode */}
-                      <td className="py-4 pl-2">
+                      <td className="py-4 pl-2 pr-4">
                         <span className="font-bold text-sm text-gray-200 block max-w-xs truncate">{p.name}</span>
                         {p.barcode && (
                           <span className="text-[10px] text-gray-500 font-mono block mt-0.5">
@@ -378,33 +526,34 @@ export default function ProductsDashboardClient({
                       </td>
 
                       {/* Selling Price */}
-                      <td className="py-4 font-extrabold text-sm text-emerald-400">
+                      <td className="py-4 px-4 font-extrabold text-sm text-emerald-400">
                         ₹{p.sellingPrice.toFixed(2)}
                       </td>
 
                       {/* Current Stock Badging */}
-                      <td className="py-4">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          p.archived
+                      <td className="py-4 align-middle px-4">
+                        <div className="flex justify-start">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${p.archived
                             ? 'bg-amber-500/10 text-amber-500/80 border border-amber-500/20'
-                            : p.stock === null 
-                              ? 'bg-gray-900/60 text-gray-500 border border-gray-800' 
-                              : p.stock <= 0 
-                                ? 'bg-rose-500/10 text-rose-450 border border-rose-500/20' 
-                                : p.stock < 5 
-                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
+                            : p.stock === null
+                              ? 'bg-gray-900/60 text-gray-500 border border-gray-800'
+                              : p.stock <= 0
+                                ? 'bg-rose-500/10 text-rose-450 border border-rose-500/20'
+                                : p.stock < 5
+                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                                   : 'bg-indigo-500/10 text-indigo-350 border border-indigo-500/20'
-                        }`}>
-                          {p.archived ? 'Archived' : p.stock === null ? 'Untracked' : p.stock <= 0 ? 'Out of Stock' : `${p.stock} left`}
-                        </span>
+                            }`}>
+                            {p.archived ? 'Archived' : p.stock === null ? 'Untracked' : p.stock <= 0 ? 'Out of Stock' : `${p.stock} left`}
+                          </span>
+                        </div>
                       </td>
 
                       {/* Interactive Adjustment Form */}
-                      <td className="py-4 text-right pr-4">
+                      <td className="py-4 px-4 align-middle">
                         {p.archived ? (
-                          <span className="text-[11px] text-gray-500 font-bold tracking-tight pr-6 select-none uppercase">Locked</span>
+                          <div className="text-center"><span className="text-[11px] text-gray-500 font-bold tracking-tight select-none uppercase">Locked</span></div>
                         ) : (
-                          <div className="inline-flex items-center gap-2">
+                          <div className="flex justify-center items-center gap-2">
                             {/* Minus Button */}
                             <button
                               type="button"
@@ -419,14 +568,14 @@ export default function ProductsDashboardClient({
                             <input
                               type="number"
                               min="0"
-                              placeholder="Unlimited"
+                              placeholder="Untracked"
                               value={finalStockVal}
                               onChange={(e) => {
                                 const v = e.target.value;
                                 setLocalStock((prev) => ({ ...prev, [p.id]: v }));
                               }}
                               disabled={isCurrentSaving}
-                              className="w-18 text-center px-2 py-1 bg-gray-900 border border-gray-750 focus:border-indigo-500 rounded-lg text-xs font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              className="w-24 text-center px-2 py-1 bg-gray-900 border border-gray-750 focus:border-indigo-500 rounded-lg text-xs font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
 
                             {/* Plus Button */}
@@ -444,13 +593,12 @@ export default function ProductsDashboardClient({
                               type="button"
                               onClick={() => handleStockUpdate(p.id, finalStockVal)}
                               disabled={isCurrentSaving || (!hasLocalChanges && p.stock === (finalStockVal === '' ? null : Number(finalStockVal)))}
-                              className={`ml-2 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
-                                isCurrentSaving
-                                  ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                                  : hasLocalChanges
-                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95 shadow-md shadow-emerald-950/20'
-                                    : 'bg-gray-900 text-gray-500 border border-gray-800 hover:bg-gray-800 cursor-pointer'
-                              }`}
+                              className={`ml-2 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${isCurrentSaving
+                                ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                                : hasLocalChanges
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95 shadow-md shadow-emerald-950/20'
+                                  : 'bg-gray-900 text-gray-500 border border-gray-800 hover:bg-gray-800 cursor-pointer'
+                                }`}
                             >
                               {isCurrentSaving ? (
                                 <div className="h-3.5 w-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
@@ -464,7 +612,7 @@ export default function ProductsDashboardClient({
                       </td>
 
                       {/* Delete / Restore Action */}
-                      <td className="py-4 text-center pr-2">
+                      <td className="py-4 px-4 text-center">
                         {p.archived ? (
                           <button
                             type="button"
@@ -526,6 +674,253 @@ export default function ProductsDashboardClient({
               >
                 Delete
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Catalog Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-gray-850 border border-gray-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col min-h-[280px] max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Store className="h-5 w-5 text-indigo-400" />
+                <h3 className="text-sm font-bold text-gray-100">Import Products</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportModal(false);
+                  resetModalState();
+                }}
+                className="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-all active:scale-95 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 flex-1 overflow-y-auto space-y-4 min-h-[200px]">
+              {importNotice && (
+                <div className={`p-3.5 rounded-xl text-xs font-semibold ${
+                  importNotice.isError ? 'bg-rose-500/10 border border-rose-500/20 text-rose-300' : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
+                }`}>
+                  {importNotice.message}
+                </div>
+              )}
+
+              {/* Step 1: Select Source Shop */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                  Select Source Shop
+                </label>
+                
+                {/* Custom Shop Dropdown Selector */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => !isImporting && setIsSourceDropdownOpen(!isSourceDropdownOpen)}
+                    disabled={isImporting}
+                    className="w-full px-3.5 py-2.5 bg-gray-900 border border-gray-750 hover:border-gray-700 disabled:opacity-50 text-white rounded-xl flex items-center justify-between text-xs font-semibold transition-all cursor-pointer select-none"
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <Store className="h-4 w-4 text-indigo-400 shrink-0" />
+                      <span className="truncate">
+                        {selectedSourceShop?.name || '-- Choose Shop --'}
+                      </span>
+                    </span>
+                    <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 shrink-0 ${isSourceDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {isSourceDropdownOpen && (
+                    <>
+                      {/* Backdrop to close dropdown click-away */}
+                      <div 
+                        className="fixed inset-0 z-10" 
+                        onClick={() => setIsSourceDropdownOpen(false)}
+                      />
+                      
+                      {/* Dropdown Options Box */}
+                      <div className="absolute left-0 right-0 mt-1.5 z-20 bg-gray-900 border border-gray-800 rounded-xl shadow-xl overflow-hidden py-1 divide-y divide-gray-800/40 max-h-48 overflow-y-auto">
+                        {otherShops.length === 0 ? (
+                          <div className="px-3.5 py-2 text-xs text-gray-500">No other shops available.</div>
+                        ) : (
+                          otherShops.map((s) => {
+                            const isSelected = s.id === selectedSourceShopId;
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => {
+                                  handleSourceShopSelect(s.id);
+                                  setIsSourceDropdownOpen(false);
+                                }}
+                                className={`w-full px-3.5 py-2.5 text-left text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer select-none ${
+                                  isSelected 
+                                    ? 'bg-indigo-600/15 text-indigo-300' 
+                                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                                }`}
+                              >
+                                <span className="truncate pr-4">{s.name}</span>
+                                {isSelected && <Check className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {selectedSourceShopId && (
+                <>
+                  {loadingSourceProducts ? (
+                    <div className="flex flex-col items-center justify-center py-10 gap-2">
+                      <Loader2 className="h-6 w-6 text-indigo-400 animate-spin" />
+                      <p className="text-xs text-gray-500">Loading products catalog...</p>
+                    </div>
+                  ) : sourceProducts.length === 0 ? (
+                    <p className="text-xs text-gray-500 text-center py-6">This shop has no products in its catalog.</p>
+                  ) : importableProducts.length === 0 ? (
+                    <p className="text-xs text-emerald-450 text-center py-6 font-semibold bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                      🎉 All products from this shop already exist in your current catalog!
+                    </p>
+                  ) : (
+                    <>
+                      {/* Step 2: Choose Method */}
+                      <div className="space-y-1.5 pt-1">
+                        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                          Import Method
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setImportMethod('all')}
+                            disabled={isImporting}
+                            className={`p-3.5 border rounded-xl text-left transition-all cursor-pointer ${
+                              importMethod === 'all'
+                                ? 'bg-indigo-600/10 border-indigo-500 text-indigo-300'
+                                : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:border-gray-700 hover:text-gray-300'
+                            }`}
+                          >
+                            <p className="text-xs font-bold">Import All Products</p>
+                            <p className="text-[10px] text-gray-500 mt-1">Clones all {importableProducts.length} new items at once.</p>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setImportMethod('selected')}
+                            disabled={isImporting}
+                            className={`p-3.5 border rounded-xl text-left transition-all cursor-pointer ${
+                              importMethod === 'selected'
+                                ? 'bg-indigo-600/10 border-indigo-500 text-indigo-300'
+                                : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:border-gray-700 hover:text-gray-300'
+                            }`}
+                          >
+                            <p className="text-xs font-bold">Select Specific Products</p>
+                            <p className="text-[10px] text-gray-500 mt-1">Choose exactly which products to import from a checklist.</p>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Option A: Import All */}
+                      {importMethod === 'all' && (
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={handleImportAll}
+                            disabled={isImporting}
+                            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                          >
+                            {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                            Import All {importableProducts.length} Products
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Option B: Selective Checklist */}
+                      {importMethod === 'selected' && (
+                        <div className="space-y-3 pt-2">
+                          {/* List Search */}
+                          <div className="relative">
+                            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-gray-500" />
+                            <input
+                              type="text"
+                              placeholder="Search products to import..."
+                              value={sourceSearchQuery}
+                              onChange={(e) => setSourceSearchQuery(e.target.value)}
+                              disabled={isImporting}
+                              className="w-full pl-9 pr-3 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:border-indigo-500 focus:outline-none text-xs text-white placeholder-gray-500"
+                            />
+                          </div>
+
+                          {/* Selection Summary and Select All */}
+                          <div className="flex items-center justify-between text-xs px-1">
+                            <span className="text-gray-400 font-medium">
+                              Selected: <span className="font-bold text-indigo-400">{selectedProductIds.size}</span> / {importableProducts.length}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleSelectAll(filteredImportableProducts)}
+                              disabled={isImporting || filteredImportableProducts.length === 0}
+                              className="text-indigo-400 hover:text-indigo-300 font-bold transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                              {filteredImportableProducts.every((p) => selectedProductIds.has(p.id)) ? 'Deselect All' : 'Select All'}
+                            </button>
+                          </div>
+
+                          {/* Checklist Container */}
+                          <div className="border border-gray-800 rounded-xl overflow-hidden divide-y divide-gray-800 bg-gray-900/40 max-h-48 overflow-y-auto">
+                            {filteredImportableProducts.length === 0 ? (
+                              <p className="text-xs text-gray-500 text-center py-8">No matching new products found.</p>
+                            ) : (
+                              filteredImportableProducts.map((p) => {
+                                const isChecked = selectedProductIds.has(p.id);
+                                return (
+                                  <label
+                                    key={p.id}
+                                    className={`px-3 py-2.5 flex items-center justify-between transition-colors select-none text-xs font-bold cursor-pointer ${
+                                      isChecked ? 'bg-indigo-500/5 text-indigo-300' : 'text-gray-300 hover:bg-gray-800/40 hover:text-white'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => toggleProductSelection(p.id)}
+                                        disabled={isImporting}
+                                        className="h-3.5 w-3.5 rounded border-gray-700 bg-gray-900 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-gray-900"
+                                      />
+                                      <div className="truncate">
+                                        <span className="block truncate">{p.name}</span>
+                                        {p.barcode && <span className="block text-[9px] text-gray-500 font-mono font-normal mt-0.5">🏷️ {p.barcode}</span>}
+                                      </div>
+                                    </div>
+                                    <span className="text-emerald-400 shrink-0 font-extrabold text-[11px] font-mono">₹{p.sellingPrice.toFixed(2)}</span>
+                                  </label>
+                                );
+                              })
+                            )}
+                          </div>
+
+                          {/* Import Action Button */}
+                          <button
+                            type="button"
+                            onClick={handleImportSelected}
+                            disabled={isImporting || selectedProductIds.size === 0}
+                            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                          >
+                            {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                            Import Selected Products ({selectedProductIds.size})
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

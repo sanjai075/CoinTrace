@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { ArrowLeft, BarChart2, Share2, ChevronDown } from 'lucide-react';
-import { ENABLE_CREDIT_CUSTOMER, ENABLE_EXPENSES } from '@/lib/features';
+import { ENABLE_CREDIT_CUSTOMER, ENABLE_EXPENSES, ENABLE_WHATSAPP_SHARE } from '@/lib/features';
 import ReportDatePickerClient from './ReportDatePickerClient';
 import QuickExpenseForm from './QuickExpenseForm';
 
@@ -44,12 +44,17 @@ export default async function ReportsPage(props: {
 
   // Default to today in IST
   const todayISTStr = new Date(new Date().getTime() + IST_OFFSET_MINUTES * 60_000).toISOString().split('T')[0];
-  const selectedDateStr = (searchParams?.date as string) || todayISTStr;
 
-  // Calculate UTC start/end of the chosen IST calendar date
-  const [y, m, d] = selectedDateStr.split('-').map(Number);
-  const startOfDayUTC = new Date(Date.UTC(y, m - 1, d, 0, 0, 0) - (IST_OFFSET_MINUTES * 60_000));
-  const endOfDayUTC = new Date(startOfDayUTC.getTime() + 86_400_000);
+  // Parse startDate and endDate, with backward compatibility for 'date'
+  const startDateStr = (searchParams?.startDate as string) || (searchParams?.date as string) || todayISTStr;
+  const endDateStr = (searchParams?.endDate as string) || (searchParams?.date as string) || todayISTStr;
+
+  // Calculate UTC start/end range of the chosen IST calendar dates
+  const [startY, startM, startD] = startDateStr.split('-').map(Number);
+  const startOfDayUTC = new Date(Date.UTC(startY, startM - 1, startD, 0, 0, 0) - (IST_OFFSET_MINUTES * 60_000));
+
+  const [endY, endM, endD] = endDateStr.split('-').map(Number);
+  const endOfDayUTC = new Date(Date.UTC(endY, endM - 1, endD, 0, 0, 0) - (IST_OFFSET_MINUTES * 60_000) + 86_400_000);
 
   // Calculate dashboard ranges in IST -> UTC
   const [todayY, todayM, todayD] = todayISTStr.split('-').map(Number);
@@ -161,7 +166,7 @@ export default async function ReportsPage(props: {
 
   // Construct WhatsApp Share Text
   const waReportText = 
-    `*${t('common.appName')} - ${selectedDateStr}*\n` +
+    `*${t('common.appName')} - ${startDateStr === endDateStr ? startDateStr : `${startDateStr} to ${endDateStr}`}*\n` +
     `-----------------------------------------\n` +
     `📈 ${t('reports.totalSales')}: ₹${totalSales.toFixed(2)}\n` +
     `   - ${t('reports.cashSales')}: ₹${cashSales.toFixed(2)}\n` +
@@ -201,15 +206,17 @@ export default async function ReportsPage(props: {
             </div>
           </div>
 
-          <a
-            href={waUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-green-600 hover:bg-green-700 text-white transition-all active:scale-[0.98] shadow-lg shadow-green-950/20"
-          >
-            <Share2 className="h-4 w-4" />
-            {t('reports.shareReport')}
-          </a>
+          {ENABLE_WHATSAPP_SHARE && (
+            <a
+              href={waUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold bg-green-600 hover:bg-green-700 text-white transition-all active:scale-[0.98] shadow-lg shadow-green-950/20"
+            >
+              <Share2 className="h-4 w-4" />
+              {t('reports.shareReport')}
+            </a>
+          )}
         </div>
 
         {/* Sales Performance Dashboard Cards */}
@@ -253,7 +260,8 @@ export default async function ReportsPage(props: {
         {/* Date Selector */}
         <ReportDatePickerClient
           shopId={shopId}
-          selectedDate={selectedDateStr}
+          selectedStartDate={startDateStr}
+          selectedEndDate={endDateStr}
           labelText="Select Report Date:"
           viewButtonText="View"
         />
@@ -264,7 +272,7 @@ export default async function ReportsPage(props: {
           {/* Cashflow summaries */}
           <div className="p-6 bg-gray-850 border border-gray-800 rounded-2xl shadow-xl space-y-4">
             <h2 className="text-lg font-bold text-gray-200 border-b border-gray-750 pb-2">
-              {t('reports.dailyReport')} ({selectedDateStr})
+              {t('reports.dailyReport')} ({startDateStr === endDateStr ? startDateStr : `${startDateStr} to ${endDateStr}`})
             </h2>
 
             <div className="space-y-3">

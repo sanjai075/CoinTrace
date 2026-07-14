@@ -14,7 +14,8 @@ import { useSearchParams } from 'next/navigation';
 import { ENABLE_CREDIT_CUSTOMER, ENABLE_SUPPLIER_LEDGER, ENABLE_EXPENSES } from '@/lib/features';
 import { 
   Package, Users, Truck, BarChart2, CreditCard, 
-  Lock, Unlock, ShoppingBag, Store, UserPlus, X
+  Lock, Unlock, ShoppingBag, Store, UserPlus, X,
+  ChevronDown, Check
 } from 'lucide-react';
 
 interface ProductItem {
@@ -55,6 +56,7 @@ export default function ShopDashboardClient({
   workers,
   myShops,
   staffMemberships,
+  existingStaffEmails = [],
 }: {
   shop: { id: string; name: string };
   isOwner: boolean;
@@ -63,6 +65,7 @@ export default function ShopDashboardClient({
   workers: WorkerItem[];
   myShops: ShopItem[];
   staffMemberships: StaffMemberItem[];
+  existingStaffEmails?: Array<{ email: string; name: string }>;
 }) {
   const t = useTranslations();
   const router = useRouter();
@@ -86,6 +89,11 @@ export default function ShopDashboardClient({
   // Local state for modals & forms
   const [showAddWorker, setShowAddWorker] = useState(false);
   const [showManageStaff, setShowManageStaff] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  
+  // Controlled staff invite state
+  const [staffEmailInput, setStaffEmailInput] = useState('');
+  const [isStaffPickerOpen, setIsStaffPickerOpen] = useState(false);
 
   // Passcode modal states
   const [showSetPinModal, setShowSetPinModal] = useState(false);
@@ -152,6 +160,7 @@ export default function ShopDashboardClient({
 
   // Check if we should restrict view (in worker mode, and active worker doesn't have owner status)
   const isRestricted = isWorkerMode;
+  const isStaffOrWorker = !isOwner || isWorkerMode;
 
   return (
     <div className="w-full max-w-5xl space-y-6">
@@ -181,23 +190,75 @@ export default function ShopDashboardClient({
       <div className="flex flex-col sm:flex-row justify-between items-center p-4 bg-gray-850 border border-gray-800 rounded-2xl gap-4 shadow-md">
         
         {/* Shop Selector Dropdown */}
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        <div className="relative flex items-center gap-2.5 w-full sm:w-auto">
           <Store className="h-5 w-5 text-indigo-400 shrink-0" />
-          <select
-            value={shop.id}
-            onChange={handleShopSwitch}
-            className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm font-bold text-white focus:outline-none focus:border-indigo-500 w-full sm:w-60"
-          >
-            {myShops.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+          
+          <div className="relative w-full sm:w-60">
+            <button
+              type="button"
+              onClick={() => setIsOpen(!isOpen)}
+              className="bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm font-bold text-white focus:outline-none focus:border-indigo-500 hover:border-gray-600 transition-all flex items-center justify-between w-full cursor-pointer select-none"
+            >
+              <span className="truncate">{shop.name}</span>
+              <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40 cursor-default" 
+                  onClick={() => setIsOpen(false)} 
+                />
+                <div className="absolute left-0 mt-2 bg-gray-900 border border-gray-800 rounded-xl py-1.5 shadow-2xl w-full z-50 overflow-hidden divide-y divide-gray-800/40">
+                  {myShops.map((s) => {
+                    const isSelected = s.id === shop.id;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          setIsOpen(false);
+                          router.push(`/shop/${s.id}`);
+                        }}
+                        className={`w-full text-left px-4 py-2.5 text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                          isSelected 
+                            ? 'text-indigo-400 bg-indigo-500/5' 
+                            : 'text-gray-300 hover:text-white hover:bg-gray-800/50'
+                        }`}
+                      >
+                        <span className="truncate pr-2">{s.name}</span>
+                        {isSelected && <Check className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Info & Switches */}
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-center sm:justify-end">
+          {isStaffOrWorker && (
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/shop/${shop.id}/products`}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600/10 border border-indigo-500/20 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 text-indigo-400 rounded-xl text-xs font-extrabold transition-all duration-200 active:scale-95 cursor-pointer shadow-sm select-none"
+              >
+                <Package className="h-3.5 w-3.5" />
+                {t('shop.products')}
+              </Link>
+              {ENABLE_CREDIT_CUSTOMER && (
+                <Link
+                  href={`/shop/${shop.id}/customers`}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600/10 border border-indigo-500/20 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 text-indigo-400 rounded-xl text-xs font-extrabold transition-all duration-200 active:scale-95 cursor-pointer shadow-sm select-none"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  {t('shop.customerKhata')}
+                </Link>
+              )}
+            </div>
+          )}
           <LanguageSwitcher />
 
           {/* Active worker status and Lock button */}
@@ -233,8 +294,9 @@ export default function ShopDashboardClient({
       {/* Main Dashboard Grid */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         
-        {/* Navigation Sidebar (restricted for workers) */}
-        <div className="md:col-span-4 space-y-4 min-w-0">
+        {/* Navigation Sidebar (Only for Owners) */}
+        {!isStaffOrWorker && (
+          <div className="md:col-span-4 space-y-4 min-w-0">
           <div className="p-5 bg-gray-850 border border-gray-800 rounded-2xl shadow-md space-y-4">
             <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">
               {t('shop.overview')}
@@ -262,8 +324,8 @@ export default function ShopDashboardClient({
                 </Link>
               )}
 
-              {/* Expense logger */}
-              {ENABLE_EXPENSES && (
+              {/* Expense logger (Hidden for Workers) */}
+              {!isWorkerMode && isOwner && ENABLE_EXPENSES && (
                 <Link
                   href={`/shop/${shop.id}/expenses`}
                   className="flex items-center gap-3 p-3.5 bg-gray-900/60 hover:bg-gray-900 border border-gray-800/80 hover:border-gray-700 rounded-xl transition-all font-semibold text-sm group"
@@ -366,14 +428,54 @@ export default function ShopDashboardClient({
                   {/* Form to Add Staff */}
                   <form action={addStaffToShop} className="space-y-3">
                     <input type="hidden" name="shopId" value={shop.id} />
-                    <label className="block text-[10px] font-bold text-gray-500 uppercase">
-                      Add Staff by Email
-                    </label>
+                    
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[10px] font-bold text-gray-500 uppercase">
+                        Add Staff by Email
+                      </label>
+                      {existingStaffEmails && existingStaffEmails.length > 0 && (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setIsStaffPickerOpen(!isStaffPickerOpen)}
+                            className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer transition-colors select-none"
+                          >
+                            <Users className="h-3 w-3" />
+                            Pick Hired Staff
+                          </button>
+                          {isStaffPickerOpen && (
+                            <>
+                              {/* Close click-away backdrop */}
+                              <div className="fixed inset-0 z-10" onClick={() => setIsStaffPickerOpen(false)} />
+                              <div className="absolute right-0 mt-1.5 z-25 bg-gray-900 border border-gray-800 rounded-xl shadow-xl overflow-hidden py-1 divide-y divide-gray-800/40 w-56 max-h-48 overflow-y-auto">
+                                {existingStaffEmails.map((staff) => (
+                                  <button
+                                    key={staff.email}
+                                    type="button"
+                                    onClick={() => {
+                                      setStaffEmailInput(staff.email);
+                                      setIsStaffPickerOpen(false);
+                                    }}
+                                    className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-gray-800 hover:text-white text-gray-300 transition-colors flex flex-col cursor-pointer select-none"
+                                  >
+                                    <span className="truncate text-[11px] text-gray-250 font-bold">{staff.name}</span>
+                                    <span className="text-[9px] text-gray-500 truncate mt-0.5">{staff.email}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex gap-2">
                       <input
                         type="email"
                         name="email"
                         required
+                        value={staffEmailInput}
+                        onChange={(e) => setStaffEmailInput(e.target.value)}
                         placeholder="Staff Email (e.g. staff@gmail.com)"
                         className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
                       />
@@ -417,9 +519,10 @@ export default function ShopDashboardClient({
             </div>
           )}
         </div>
+      )}
 
-        {/* Tactile Sales Checkout Area */}
-        <div className="md:col-span-8 space-y-4 min-w-0">
+      {/* Tactile Sales Checkout Area */}
+        <div className={`${isStaffOrWorker ? 'md:col-span-12' : 'md:col-span-8'} space-y-4 min-w-0`}>
           <div className="p-4 sm:p-6 bg-gray-850 border border-gray-800 rounded-3xl shadow-xl space-y-4">
             <h2 className="text-xl font-black text-gray-100 flex items-center gap-2 border-b border-gray-800 pb-3">
               <ShoppingBag className="h-6 w-6 text-emerald-400" />

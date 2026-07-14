@@ -506,3 +506,117 @@ export async function unarchiveProduct(formData: FormData) {
   revalidatePath(`/shop/${shopId}/products`);
   return { success: true };
 }
+
+// ----------------------------------------------------
+// Catalog Sharing: Clone / Import Actions
+// ----------------------------------------------------
+
+export async function getShopActiveProducts(shopId: string) {
+  const user = await stackServerApp.getUser({ or: 'throw' });
+
+  // Verify auth: must be owner of the shop to fetch active products for clone
+  const isOwner = await prisma.shop.findFirst({ where: { id: shopId, ownerId: user.id } });
+  if (!isOwner) throw new Error('Not authorized: You must be the owner of this shop.');
+
+  return prisma.product.findMany({
+    where: { shopId, archived: false },
+    select: { id: true, name: true, barcode: true, sellingPrice: true },
+    orderBy: { name: 'asc' },
+  });
+}
+
+export async function cloneAllProducts(sourceShopId: string, targetShopId: string) {
+  const user = await stackServerApp.getUser({ or: 'throw' });
+
+  // Verify auth: must be owner of the source shop
+  const isOwnerSource = await prisma.shop.findFirst({ where: { id: sourceShopId, ownerId: user.id } });
+  if (!isOwnerSource) return { error: 'Not authorized: You must be the owner of the source shop.' };
+
+  const isOwnerTarget = await prisma.shop.findFirst({ where: { id: targetShopId, ownerId: user.id } });
+  const isStaffTarget = await prisma.staffMembership.findFirst({ where: { shopId: targetShopId, userId: user.id } });
+  if (!isOwnerTarget && !isStaffTarget) return { error: 'Not authorized for target shop.' };
+
+  // Fetch all active products in source shop
+  const sourceProducts = await prisma.product.findMany({
+    where: { shopId: sourceShopId, archived: false },
+  });
+
+  // Fetch existing target products to avoid duplicates
+  const targetProducts = await prisma.product.findMany({
+    where: { shopId: targetShopId },
+    select: { name: true, barcode: true },
+  });
+
+  const targetNames = new Set(targetProducts.map((p) => p.name.toLowerCase()));
+  const targetBarcodes = new Set(targetProducts.map((p) => p.barcode).filter(Boolean));
+
+  // Filter out duplicates
+  const toClone = sourceProducts.filter((p) => {
+    const nameMatch = targetNames.has(p.name.toLowerCase());
+    const barcodeMatch = p.barcode ? targetBarcodes.has(p.barcode) : false;
+    return !nameMatch && !barcodeMatch;
+  });
+
+  if (toClone.length > 0) {
+    await prisma.product.createMany({
+      data: toClone.map((p) => ({
+        name: p.name,
+        sellingPrice: p.sellingPrice,
+        barcode: p.barcode,
+        stock: null, // Untracked stock level initially
+        shopId: targetShopId,
+      })),
+    });
+  }
+
+  revalidatePath(`/shop/${targetShopId}/products`);
+  return { success: true, count: toClone.length };
+}
+
+export async function cloneSelectedProducts(sourceShopId: string, targetShopId: string, productIds: string[]) {
+  const user = await stackServerApp.getUser({ or: 'throw' });
+
+  // Verify auth: must be owner of the source shop
+  const isOwnerSource = await prisma.shop.findFirst({ where: { id: sourceShopId, ownerId: user.id } });
+  if (!isOwnerSource) return { error: 'Not authorized: You must be the owner of the source shop.' };
+
+  const isOwnerTarget = await prisma.shop.findFirst({ where: { id: targetShopId, ownerId: user.id } });
+  const isStaffTarget = await prisma.staffMembership.findFirst({ where: { shopId: targetShopId, userId: user.id } });
+  if (!isOwnerTarget && !isStaffTarget) return { error: 'Not authorized for target shop.' };
+
+  // Fetch selected products from source shop
+  const sourceProducts = await prisma.product.findMany({
+    where: { id: { in: productIds }, shopId: sourceShopId, archived: false },
+  });
+
+  // Fetch existing target products to avoid duplicates
+  const targetProducts = await prisma.product.findMany({
+    where: { shopId: targetShopId },
+    select: { name: true, barcode: true },
+  });
+
+  const targetNames = new Set(targetProducts.map((p) => p.name.toLowerCase()));
+  const targetBarcodes = new Set(targetProducts.map((p) => p.barcode).filter(Boolean));
+
+  // Filter out duplicates
+  const toClone = sourceProducts.filter((p) => {
+    const nameMatch = targetNames.has(p.name.toLowerCase());
+    const barcodeMatch = p.barcode ? targetBarcodes.has(p.barcode) : false;
+    return !nameMatch && !barcodeMatch;
+  });
+
+  if (toClone.length > 0) {
+    await prisma.product.createMany({
+      data: toClone.map((p) => ({
+        name: p.name,
+        sellingPrice: p.sellingPrice,
+        barcode: p.barcode,
+        stock: null, // Untracked stock level initially
+        shopId: targetShopId,
+      })),
+    });
+  }
+
+  revalidatePath(`/shop/${targetShopId}/products`);
+  return { success: true, count: toClone.length };
+}

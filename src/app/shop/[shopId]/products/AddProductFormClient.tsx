@@ -175,7 +175,7 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
               name="stock"
               min="0"
               disabled={isPending}
-              placeholder="Blank = unlimited"
+              placeholder="e.g., 100"
               className="w-full px-4 py-3 bg-gray-900 border border-gray-700 focus:border-indigo-500 rounded-xl focus:outline-none text-sm text-white disabled:opacity-50"
             />
           </div>

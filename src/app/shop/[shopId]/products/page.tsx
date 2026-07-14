@@ -58,6 +58,13 @@ export default async function ProductsPage(props: {
     createdAt: log.createdAt.toISOString(),
   }));
 
+  // Fetch owned shops only for catalog cloning (Security Rule)
+  const myShops = await prisma.shop.findMany({
+    where: { ownerId: user.id },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+
   return (
     <main className="min-h-screen w-full p-4 md:p-8 bg-gray-900 text-white flex flex-col items-center overflow-x-hidden">
       <div className="w-full max-w-2xl space-y-6">
@@ -87,6 +94,7 @@ export default async function ProductsPage(props: {
           shopId={shopId} 
           initialProducts={products} 
           initialLogs={formattedLogs}
+          myShops={myShops}
         />
 
       </div>

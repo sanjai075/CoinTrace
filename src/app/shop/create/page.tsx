@@ -27,6 +27,14 @@ export default async function CreateShopPage() {
     });
   }
 
+  // Redirect to home if user is staff in any shop (safety rule)
+  const isStaffAnywhere = await prisma.staffMembership.findFirst({
+    where: { userId: dbUser.id },
+  });
+  if (isStaffAnywhere) {
+    redirect('/');
+  }
+
   const now = new Date();
   const ownedShopsCount = await prisma.shop.count({
     where: { ownerId: dbUser.id },

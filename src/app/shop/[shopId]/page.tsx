@@ -60,6 +60,30 @@ export default async function ShopPage(props: {
   });
   const myShops = [...ownedShops, ...staffMemberships.map(m => m.shop)];
 
+  // Fetch emails of staff members working in other shops owned by this user
+  let existingStaffEmails: Array<{ email: string; name: string }> = [];
+  if (isOwner) {
+    const otherStaff = await prisma.staffMembership.findMany({
+      where: {
+        shop: {
+          ownerId: user.id,
+          NOT: { id: shopId } // exclude this shop
+        }
+      },
+      include: {
+        user: { select: { email: true, name: true } }
+      }
+    });
+    // Filter duplicates
+    const uniqueMap = new Map<string, string>();
+    otherStaff.forEach(s => {
+      if (s.user.email) {
+        uniqueMap.set(s.user.email, s.user.name || 'Staff Member');
+      }
+    });
+    existingStaffEmails = Array.from(uniqueMap.entries()).map(([email, name]) => ({ email, name }));
+  }
+
   // Fetch products, customers, and workers in parallel
   const [products, customers, workers] = await Promise.all([
     prisma.product.findMany({
@@ -84,7 +108,7 @@ export default async function ShopPage(props: {
       {/* Header bar */}
       <div className="w-full max-w-5xl flex items-center justify-between border-b border-gray-800 pb-4 mb-5">
         <div>
-          <h1 className="text-xl font-black tracking-tight text-indigo-400">CoinTrace Kirana</h1>
+          <h1 className="text-xl font-black tracking-tight text-indigo-400">CoinTrace</h1>
           <p className="text-[10px] text-gray-500">Welcome, {user.displayName || user.primaryEmail}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -104,6 +128,7 @@ export default async function ShopPage(props: {
         customers={customers}
         workers={workers}
         myShops={myShops}
+        existingStaffEmails={existingStaffEmails}
         staffMemberships={shop.staffMemberships.map((m) => ({
           id: m.user.id,
           email: m.user.email,

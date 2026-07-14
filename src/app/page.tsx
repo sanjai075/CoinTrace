@@ -68,12 +68,16 @@ function ShopList({ title, shops, role }: { title: string; shops: Shop[]; role: 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {shops.map((shop) => (
           <Link href={`/shop/${shop.id}`} key={shop.id} className="group">
-            <div className="p-6 bg-gray-850 border border-gray-800 hover:border-gray-750 rounded-2xl shadow-md flex items-center justify-between transition-all hover:translate-y-[-1px]">
+            <div className={`p-5 pl-6 bg-gray-850 border border-gray-800 hover:border-gray-700/80 rounded-2xl shadow-md flex items-center justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${
+              role === 'OWNER'
+                ? 'border-l-4 border-l-indigo-500 hover:shadow-indigo-950/20'
+                : 'border-l-4 border-l-emerald-500 hover:shadow-emerald-950/20'
+            }`}>
               <div className="flex items-center gap-3.5">
-                <div className={`p-3 rounded-xl border ${
+                <div className={`p-3 rounded-xl border transition-colors duration-300 ${
                   role === 'OWNER' 
-                    ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400' 
-                    : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                    ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400 group-hover:bg-indigo-650 group-hover:text-white group-hover:border-indigo-550' 
+                    : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 group-hover:bg-emerald-650 group-hover:text-white group-hover:border-emerald-550'
                 }`}>
                   <Store className="h-5 w-5" />
                 </div>
@@ -84,7 +88,7 @@ function ShopList({ title, shops, role }: { title: string; shops: Shop[]; role: 
                   </span>
                 </div>
               </div>
-              <ChevronRight className="h-5 w-5 text-gray-500 group-hover:text-gray-300 transition-colors" />
+              <ChevronRight className="h-5 w-5 text-gray-500 group-hover:text-gray-300 group-hover:translate-x-1 transition-all" />
             </div>
           </Link>
         ))}
@@ -119,6 +123,7 @@ function WelcomeNewUser() {
 
 export default async function Home() {
   const user = await stackServerApp.getUser();
+  const userName = user ? (user.displayName || user.primaryEmail?.split('@')[0] || 'User') : 'User';
   const { ownedShops, staffShops } = user ? await getShopsForUser() : { ownedShops: [], staffShops: [] };
   const hasShops = ownedShops.length > 0 || staffShops.length > 0;
 
@@ -202,20 +207,53 @@ export default async function Home() {
           <WelcomeNewUser />
         ) : (
           /* Logged In, Has Shops (Dashboard list) */
-          <div className="w-full space-y-8 max-w-3xl">
+          <div className="w-full space-y-8 max-w-3xl animate-in fade-in duration-300">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-gray-800">
               <div>
                 <h1 className="text-2xl font-black text-gray-100">My Dashboards</h1>
                 <p className="text-xs text-gray-400">Select a store registry to oversee billing and ledgers</p>
               </div>
-              <Link
-                href="/shop/create"
-                className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-indigo-950/20 cursor-pointer"
-              >
-                Create Shop
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
+              {staffShops.length === 0 && (
+                <Link
+                  href="/shop/create"
+                  className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-indigo-950/20 cursor-pointer"
+                >
+                  Create Shop
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
             </div>
+
+            {/* Custom Welcome Banners */}
+            {staffShops.length > 0 ? (
+              <div className="p-6 bg-gradient-to-br from-indigo-950/40 via-gray-900/80 to-purple-950/20 border border-indigo-900/30 rounded-3xl shadow-xl flex flex-col sm:flex-row gap-5 items-start sm:items-center animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-2xl shrink-0">
+                  <ShieldCheck className="h-7 w-7 animate-pulse" />
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-lg font-extrabold text-gray-100">
+                    Welcome back, {userName}!
+                  </h2>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    You have secure access to <strong className="text-indigo-300 font-bold">{staffShops.length} store registers</strong> as an invited staff member. Select a shop below to open the sales checkout POS interface.
+                  </p>
+                </div>
+              </div>
+            ) : ownedShops.length > 0 ? (
+              <div className="p-6 bg-gradient-to-br from-indigo-950/40 via-gray-900/80 to-indigo-950/10 border border-indigo-900/30 rounded-3xl shadow-xl flex flex-col sm:flex-row gap-5 items-start sm:items-center animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-2xl shrink-0">
+                  <Store className="h-7 w-7" />
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-lg font-extrabold text-gray-100">
+                    Welcome back, {userName}!
+                  </h2>
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    You are signed in as a store owner. Select one of your store databases below to check sales performance, track credit books, and manage staff members.
+                  </p>
+                </div>
+              </div>
+            ) : null}
 
             <ShopList title="My Shops (Owner)" shops={ownedShops} role="OWNER" />
             <ShopList title="My Shops (Staff)" shops={staffShops} role="STAFF" />
