@@ -191,7 +191,7 @@ export default function ShopDashboardClient({
         
         {/* Shop Selector Dropdown */}
         <div className="relative flex items-center gap-2.5 w-full sm:w-auto">
-          <Store className="h-5 w-5 text-indigo-400 shrink-0" />
+          <img src="/logo.png" alt="CoinTrace Logo" className="h-7 w-7 object-contain rounded-lg shrink-0" />
           
           <div className="relative w-full sm:w-60">
             <button

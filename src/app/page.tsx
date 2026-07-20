@@ -16,10 +16,8 @@ function Navbar({ user }: { user: User | null }) {
   return (
     <nav className="w-[calc(100%-2rem)] max-w-5xl mx-auto flex items-center justify-between p-4 bg-gray-850/60 backdrop-blur-md border border-gray-800 rounded-2xl shadow-lg mt-4">
       {/* Brand Logo */}
-      <Link href="/" className="flex items-center gap-2 group">
-        <div className="p-2 bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition-all">
-          <Store className="h-5 w-5" />
-        </div>
+      <Link href="/" className="flex items-center gap-2.5 group">
+        <img src="/logo.png" alt="CoinTrace Logo" className="h-9 w-9 object-contain rounded-xl shadow-md group-hover:scale-105 transition-all" />
         <span className="font-black text-xl tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
           CoinTrace
         </span>
@@ -101,8 +99,8 @@ function ShopList({ title, shops, role }: { title: string; shops: Shop[]; role: 
 function WelcomeNewUser() {
   return (
     <div className="max-w-md p-8 space-y-6 bg-gray-850 border border-gray-800 rounded-2xl shadow-xl flex flex-col items-center text-center">
-      <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full">
-        <Store className="h-8 w-8" />
+      <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl shadow-lg">
+        <img src="/logo.png" alt="CoinTrace Logo" className="h-12 w-12 object-contain rounded-xl" />
       </div>
       <div className="space-y-2">
         <h1 className="text-2xl font-black text-gray-100">Welcome to CoinTrace</h1>

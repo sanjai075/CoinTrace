@@ -24,6 +24,10 @@ export const metadata: Metadata = {
   title: "CoinTrace - Daily Register",
   description: "Simple Digital Khata + Daily Register for Small Retail Shops",
   manifest: "/manifest.json", // Automatically hooks up manifest link
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default async function RootLayout({
