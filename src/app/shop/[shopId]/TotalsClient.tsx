@@ -43,7 +43,7 @@ export default function TotalsClient({ shopId }: { shopId: string }) {
         // Mark that we successfully fetched the total for this date
         setHasDateTotal(true);
       }
-    } catch (err) {
+    } catch {
       setDateError("Network error");
       setDateTotal(null);
       setEntries(null);
@@ -76,7 +76,7 @@ export default function TotalsClient({ shopId }: { shopId: string }) {
       } else {
         setRangeTotal(data.total ?? 0);
       }
-    } catch (err) {
+    } catch {
       setRangeError("Network error");
       setRangeTotal(null);
     } finally {
