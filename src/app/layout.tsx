@@ -23,10 +23,21 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "CoinTrace - Daily Register",
   description: "Simple Digital Khata + Daily Register for Small Retail Shops",
-  manifest: "/manifest.json", // Automatically hooks up manifest link
+  manifest: "/manifest.json",
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: [
+      { url: "/logo.png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "CoinTrace",
   },
 };
 
