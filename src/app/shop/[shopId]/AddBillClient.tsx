@@ -83,7 +83,12 @@ export default function AddBillClient({
         qrCodeRef.current = scanner;
 
         const startPromise = scanner.start(
-          { facingMode: "environment" },
+          {
+            facingMode: "environment",
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 },
+            advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet]
+          },
           {
             fps: 15,
             qrbox: (width, height) => {
@@ -126,10 +131,29 @@ export default function AddBillClient({
 
         startPromiseRef.current = startPromise;
 
-        startPromise.catch((err) => {
-          console.error("Camera fail:", err);
-          setScanError("Failed to access camera. Please check camera permission.");
-        });
+        startPromise
+          .then(() => {
+            try {
+              const runningTrackGetter = (scanner as unknown as { getRunningTrack?: () => MediaStreamTrack }).getRunningTrack;
+              if (runningTrackGetter) {
+                const track = runningTrackGetter.call(scanner);
+                if (track && typeof track.getCapabilities === "function") {
+                  const capabilities = (track as unknown as { getCapabilities: () => Record<string, unknown> }).getCapabilities();
+                  if (capabilities.focusMode && Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes("continuous")) {
+                    track.applyConstraints({
+                      advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet]
+                    });
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn("Autofocus constraint fallback:", e);
+            }
+          })
+          .catch((err) => {
+            console.error("Camera fail:", err);
+            setScanError("Camera failed to start. Please grant camera permission.");
+          });
 
       } catch (err) {
         console.error("Scanner setup fail:", err);
