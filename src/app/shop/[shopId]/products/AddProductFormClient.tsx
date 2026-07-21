@@ -27,40 +27,15 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
     setScanError(null);
 
     // Give the DOM a tiny frame to mount the #addProductQrReader container
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       try {
         const scanner = new Html5Qrcode("addProductQrReader");
         qrCodeRef.current = scanner;
 
-        let cameraConstraint: string | { facingMode: string } = { facingMode: "environment" };
-        try {
-          const devices = await Html5Qrcode.getCameras();
-          if (devices && devices.length > 0) {
-            const mainCamera = devices.find((d) => {
-              const label = d.label.toLowerCase();
-              return (
-                (label.includes("back") || label.includes("rear") || label.includes("main") || label.includes("environment")) &&
-                !label.includes("ultra") &&
-                !label.includes("0.5") &&
-                !label.includes("wide")
-              );
-            }) || devices.find((d) => {
-              const label = d.label.toLowerCase();
-              return label.includes("back") || label.includes("rear");
-            }) || devices[devices.length - 1] || devices[0];
-
-            if (mainCamera && mainCamera.id) {
-              cameraConstraint = mainCamera.id;
-            }
-          }
-        } catch (e) {
-          console.warn("Could not enumerate cameras, falling back to facingMode:", e);
-        }
-
         const startPromise = scanner.start(
-          cameraConstraint,
+          { facingMode: "environment" },
           {
-            fps: 20,
+            fps: 25,
             qrbox: (width: number, height: number) => {
               // Perfect rectangular target box for scanning thin barcodes
               return {
@@ -91,9 +66,22 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
                 const track = runningTrackGetter.call(scanner);
                 if (track && typeof track.getCapabilities === "function") {
                   const capabilities = (track as unknown as { getCapabilities: () => Record<string, unknown> }).getCapabilities();
+                  const advancedConstraints: Record<string, unknown> = {};
+
                   if (capabilities.focusMode && Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes("continuous")) {
+                    advancedConstraints.focusMode = "continuous";
+                  }
+
+                  if (capabilities.zoom && typeof capabilities.zoom === "object") {
+                    const zoomCaps = capabilities.zoom as { min?: number; max?: number };
+                    if (zoomCaps.min !== undefined) {
+                      advancedConstraints.zoom = Math.max(1, zoomCaps.min);
+                    }
+                  }
+
+                  if (Object.keys(advancedConstraints).length > 0) {
                     track.applyConstraints({
-                      advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet]
+                      advanced: [advancedConstraints as MediaTrackConstraintSet]
                     }).catch(() => {});
                   }
                 }
