@@ -27,23 +27,51 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
     setScanError(null);
 
     // Give the DOM a tiny frame to mount the #addProductQrReader container
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       try {
         const scanner = new Html5Qrcode("addProductQrReader");
         qrCodeRef.current = scanner;
 
+        let cameraConstraint: string | { facingMode: string } = { facingMode: "environment" };
+        try {
+          const devices = await Html5Qrcode.getCameras();
+          if (devices && devices.length > 0) {
+            const mainCamera = devices.find((d) => {
+              const label = d.label.toLowerCase();
+              return (
+                (label.includes("back") || label.includes("rear") || label.includes("main") || label.includes("environment")) &&
+                !label.includes("ultra") &&
+                !label.includes("0.5") &&
+                !label.includes("wide")
+              );
+            }) || devices.find((d) => {
+              const label = d.label.toLowerCase();
+              return label.includes("back") || label.includes("rear");
+            }) || devices[devices.length - 1] || devices[0];
+
+            if (mainCamera && mainCamera.id) {
+              cameraConstraint = mainCamera.id;
+            }
+          }
+        } catch (e) {
+          console.warn("Could not enumerate cameras, falling back to facingMode:", e);
+        }
+
         const startPromise = scanner.start(
-          { facingMode: "environment" },
+          cameraConstraint,
           {
-            fps: 15,
-            qrbox: (width, height) => {
+            fps: 20,
+            qrbox: (width: number, height: number) => {
               // Perfect rectangular target box for scanning thin barcodes
               return {
                 width: Math.min(width * 0.8, 280),
                 height: Math.min(height * 0.4, 110)
               };
+            },
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true
             }
-          },
+          } as unknown as { fps: number },
           (decodedText) => {
             setBarcode(decodedText);
             handleCloseScan();
@@ -270,23 +298,25 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
                 <p className="text-xs text-rose-300 font-semibold bg-rose-500/10 border border-rose-500/20 py-2.5 px-4 rounded-xl">
                   ⚠️ {scanError}
                 </p>
-                <button
-                  onClick={async () => {
-                    setScanError(null);
-                    try {
-                      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-                      stream.getTracks().forEach(t => t.stop());
-                      setIsScanning(false);
-                      setTimeout(() => setIsScanning(true), 100);
-                    } catch (err) {
-                      console.error("Direct permission prompt fail:", err);
-                      setScanError("Camera blocked by browser. Please allow camera in phone browser site settings.");
-                    }
-                  }}
-                  className="py-2 px-4 bg-rose-600/20 hover:bg-rose-600/30 text-rose-200 border border-rose-500/30 text-xs font-bold rounded-xl transition-all cursor-pointer w-full"
-                >
-                  🔒 Enable / Allow Camera Permission
-                </button>
+                {scanError.toLowerCase().includes("camera") && (
+                  <button
+                    onClick={async () => {
+                      setScanError(null);
+                      try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                        stream.getTracks().forEach(t => t.stop());
+                        setIsScanning(false);
+                        setTimeout(() => setIsScanning(true), 100);
+                      } catch (err) {
+                        console.error("Direct permission prompt fail:", err);
+                        setScanError("Camera blocked by browser. Please allow camera in phone browser site settings.");
+                      }
+                    }}
+                    className="py-2 px-4 bg-rose-600/20 hover:bg-rose-600/30 text-rose-200 border border-rose-500/30 text-xs font-bold rounded-xl transition-all cursor-pointer w-full"
+                  >
+                    🔒 Enable / Allow Camera Permission
+                  </button>
+                )}
               </div>
             )}
 
