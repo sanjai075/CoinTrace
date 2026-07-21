@@ -33,12 +33,7 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
         qrCodeRef.current = scanner;
 
         const startPromise = scanner.start(
-          {
-            facingMode: "environment",
-            width: { ideal: 1920, min: 1280 },
-            height: { ideal: 1080, min: 720 },
-            advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet]
-          },
+          { facingMode: "environment" },
           {
             fps: 15,
             qrbox: (width, height) => {
@@ -71,7 +66,7 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
                   if (capabilities.focusMode && Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes("continuous")) {
                     track.applyConstraints({
                       advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet]
-                    });
+                    }).catch(() => {});
                   }
                 }
               }
