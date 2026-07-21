@@ -1,9 +1,50 @@
 'use client';
 
-import { useState, useTransition, useMemo } from 'react';
-import { Search, ShieldAlert, Check, Plus, Minus, Layers, EyeOff, Trash2, RotateCcw, ClipboardList, Store, X, Loader2, ChevronDown, Pencil } from 'lucide-react';
+import { useState, useTransition, useMemo, useRef, useEffect } from 'react';
+import { Search, ShieldAlert, Check, Plus, Minus, Layers, EyeOff, Trash2, RotateCcw, ClipboardList, Store, X, Loader2, ChevronDown, Pencil, Camera } from 'lucide-react';
 import { updateProductStock, deleteProduct, unarchiveProduct, getShopActiveProducts, cloneAllProducts, cloneSelectedProducts, updateProductDetails } from '@/app/actions/kirana';
 import { useTranslations } from 'next-intl';
+import { Html5Qrcode } from 'html5-qrcode';
+
+const CAMERA_CACHE_KEY = 'cointrace_preferred_camera_id';
+
+async function getOrSelectBestCameraId(): Promise<string | { facingMode: string }> {
+  if (typeof window !== 'undefined') {
+    const cachedId = localStorage.getItem(CAMERA_CACHE_KEY);
+    if (cachedId) {
+      return cachedId;
+    }
+  }
+
+  try {
+    const devices = await Html5Qrcode.getCameras();
+    if (!devices || devices.length === 0) return { facingMode: "environment" };
+
+    const backCameras = devices.filter((d) => {
+      const label = d.label.toLowerCase();
+      return !label.includes("front") && !label.includes("user") && !label.includes("selfie") && !label.includes("depth");
+    });
+
+    let selectedId = "";
+    if (backCameras.length > 0) {
+      const primaryMatch = backCameras.find((d) => {
+        const label = d.label.toLowerCase();
+        return label.includes("main") || label.includes("primary") || label.includes("back 0") || label.includes("0, facing back");
+      });
+      selectedId = (primaryMatch && primaryMatch.id) || backCameras[backCameras.length - 1].id;
+    } else {
+      selectedId = devices[devices.length - 1].id;
+    }
+
+    if (selectedId && typeof window !== 'undefined') {
+      localStorage.setItem(CAMERA_CACHE_KEY, selectedId);
+    }
+    return selectedId || { facingMode: "environment" };
+  } catch (e) {
+    console.warn("Camera enum fallback:", e);
+    return { facingMode: "environment" };
+  }
+}
 
 interface ProductItem {
   id: string;
@@ -69,6 +110,70 @@ export default function ProductsDashboardClient({
   const [editStock, setEditStock] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
   const [isEditSaving, setIsEditSaving] = useState(false);
+  const [isEditScanning, setIsEditScanning] = useState(false);
+
+  const editQrCodeRef = useRef<Html5Qrcode | null>(null);
+  const editStartPromiseRef = useRef<Promise<unknown> | null>(null);
+
+  useEffect(() => {
+    if (!isEditScanning) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const scanner = new Html5Qrcode("editProductQrReader");
+        editQrCodeRef.current = scanner;
+
+        const cameraConstraint = await getOrSelectBestCameraId();
+        const startPromise = scanner.start(
+          cameraConstraint,
+          {
+            fps: 30,
+            qrbox: (width: number, height: number) => ({
+              width: Math.min(width * 0.95, 360),
+              height: Math.min(height * 0.75, 240)
+            }),
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true
+            }
+          } as unknown as { fps: number },
+          (decodedText) => {
+            setEditBarcode(decodedText);
+            setIsEditScanning(false);
+            if (editQrCodeRef.current?.isScanning) {
+              editQrCodeRef.current.stop().catch(console.error);
+            }
+          },
+          () => {}
+        );
+
+        editStartPromiseRef.current = startPromise;
+
+        startPromise.catch((err) => {
+          console.error("Edit camera error:", err);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem(CAMERA_CACHE_KEY);
+          }
+        });
+      } catch (e) {
+        console.error("Edit scanner setup fail:", e);
+      }
+    }, 20);
+
+    return () => {
+      clearTimeout(timer);
+      const scanner = editQrCodeRef.current;
+      if (scanner) {
+        editQrCodeRef.current = null;
+        if (editStartPromiseRef.current) {
+          editStartPromiseRef.current.then(() => {
+            if (scanner.isScanning) scanner.stop().catch(console.error);
+          }).catch(() => {});
+        } else if (scanner.isScanning) {
+          scanner.stop().catch(console.error);
+        }
+      }
+    };
+  }, [isEditScanning]);
 
   const handleOpenEdit = (p: ProductItem) => {
     setEditingProduct(p);
@@ -77,6 +182,7 @@ export default function ProductsDashboardClient({
     setEditBarcode(p.barcode || '');
     setEditStock(p.stock !== null ? String(p.stock) : '');
     setEditError(null);
+    setIsEditScanning(false);
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -1061,14 +1167,41 @@ export default function ProductsDashboardClient({
 
               <div>
                 <label className="block text-xs font-bold text-gray-300 mb-1">Barcode (Optional)</label>
-                <input
-                  type="text"
-                  value={editBarcode}
-                  onChange={(e) => setEditBarcode(e.target.value)}
-                  placeholder="Scan or type barcode"
-                  className="w-full px-3.5 py-2.5 bg-gray-900 border border-gray-750 focus:border-indigo-500 rounded-xl text-sm font-semibold text-white focus:outline-none font-mono"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={editBarcode}
+                    onChange={(e) => setEditBarcode(e.target.value)}
+                    placeholder="Scan or type barcode"
+                    className="w-full px-3.5 py-2.5 bg-gray-900 border border-gray-750 focus:border-indigo-500 rounded-xl text-sm font-semibold text-white focus:outline-none font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsEditScanning((prev) => !prev)}
+                    className={`px-3.5 py-2.5 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                      isEditScanning
+                        ? 'bg-rose-600/20 text-rose-300 border-rose-500/30 hover:bg-rose-600/30'
+                        : 'bg-indigo-600/20 text-indigo-300 border-indigo-500/30 hover:bg-indigo-600/30'
+                    }`}
+                  >
+                    <Camera className="h-4 w-4" />
+                    {isEditScanning ? "Close" : "Scan"}
+                  </button>
+                </div>
               </div>
+
+              {/* Inline Camera Scanner for Edit Modal */}
+              {isEditScanning && (
+                <div className="space-y-2 p-3 bg-gray-900 border border-indigo-500/30 rounded-xl animate-in fade-in">
+                  <div className="w-full aspect-[4/3] rounded-lg overflow-hidden bg-black relative flex items-center justify-center">
+                    <div id="editProductQrReader" className="w-full h-full object-cover"></div>
+                    <div className="absolute left-2 right-2 h-0.5 bg-red-500 shadow-md shadow-red-500 animate-pulse pointer-events-none" style={{ top: '50%' }}></div>
+                  </div>
+                  <p className="text-[11px] text-gray-400 text-center">
+                    Point camera at barcode to auto-fill.
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center gap-2 pt-2">
                 <button
