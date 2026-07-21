@@ -565,9 +565,28 @@ export default function AddBillClient({
 
             {/* Scan error warning banner */}
             {scanError && (
-              <p className="text-center text-xs text-rose-300 font-semibold bg-rose-500/10 border border-rose-500/20 py-2.5 px-4 rounded-xl">
-                ⚠️ {scanError}
-              </p>
+              <div className="text-center space-y-2">
+                <p className="text-xs text-rose-300 font-semibold bg-rose-500/10 border border-rose-500/20 py-2.5 px-4 rounded-xl">
+                  ⚠️ {scanError}
+                </p>
+                <button
+                  onClick={async () => {
+                    setScanError(null);
+                    try {
+                      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                      stream.getTracks().forEach(t => t.stop());
+                      setIsScanning(false);
+                      setTimeout(() => setIsScanning(true), 100);
+                    } catch (err) {
+                      console.error("Direct permission prompt fail:", err);
+                      setScanError("Camera blocked by browser. Please allow camera in phone browser site settings.");
+                    }
+                  }}
+                  className="py-2 px-4 bg-rose-600/20 hover:bg-rose-600/30 text-rose-200 border border-rose-500/30 text-xs font-bold rounded-xl transition-all cursor-pointer w-full"
+                >
+                  🔒 Enable / Allow Camera Permission
+                </button>
+              </div>
             )}
 
             <button
