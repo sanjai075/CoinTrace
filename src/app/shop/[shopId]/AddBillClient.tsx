@@ -286,18 +286,25 @@ export default function AddBillClient({
     const prod = productMap.get(productId);
     if (!prod) return "Product not found";
 
-    const currentQtyInCart = cart[productId] || 0;
-    if (prod.stock !== null && currentQtyInCart >= prod.stock) {
-      const err = `Cannot add. "${prod.name}" has only ${prod.stock} items in stock.`;
+    let err: string | null = null;
+    setCart((prev) => {
+      const currentQtyInCart = prev[productId] || 0;
+      if (prod.stock !== null && currentQtyInCart >= prod.stock) {
+        err = `Cannot add. "${prod.name}" has only ${prod.stock} items in stock.`;
+        return prev;
+      }
+      return {
+        ...prev,
+        [productId]: currentQtyInCart + 1,
+      };
+    });
+
+    if (err) {
       setMessage(`⚠️ ${err}`);
       return err;
     }
 
     setMessage(null);
-    setCart((prev) => ({
-      ...prev,
-      [productId]: currentQtyInCart + 1,
-    }));
     return null;
   };
 
