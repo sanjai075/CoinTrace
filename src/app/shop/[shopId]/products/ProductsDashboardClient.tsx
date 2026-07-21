@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition, useMemo } from 'react';
-import { Search, ShieldAlert, Check, Plus, Minus, Layers, EyeOff, Trash2, RotateCcw, ClipboardList, Store, X, Loader2, ChevronDown } from 'lucide-react';
-import { updateProductStock, deleteProduct, unarchiveProduct, getShopActiveProducts, cloneAllProducts, cloneSelectedProducts } from '@/app/actions/kirana';
+import { Search, ShieldAlert, Check, Plus, Minus, Layers, EyeOff, Trash2, RotateCcw, ClipboardList, Store, X, Loader2, ChevronDown, Pencil } from 'lucide-react';
+import { updateProductStock, deleteProduct, unarchiveProduct, getShopActiveProducts, cloneAllProducts, cloneSelectedProducts, updateProductDetails } from '@/app/actions/kirana';
 import { useTranslations } from 'next-intl';
 
 interface ProductItem {
@@ -60,6 +60,59 @@ export default function ProductsDashboardClient({
 
   // Sub-filter for audit logs tab
   const [logFilter, setLogFilter] = useState<'all' | 'increased' | 'decreased'>('all');
+
+  // Edit Product states
+  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editBarcode, setEditBarcode] = useState('');
+  const [editStock, setEditStock] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isEditSaving, setIsEditSaving] = useState(false);
+
+  const handleOpenEdit = (p: ProductItem) => {
+    setEditingProduct(p);
+    setEditName(p.name);
+    setEditPrice(String(p.sellingPrice));
+    setEditBarcode(p.barcode || '');
+    setEditStock(p.stock !== null ? String(p.stock) : '');
+    setEditError(null);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+
+    if (!editName.trim() || isNaN(Number(editPrice)) || Number(editPrice) < 0) {
+      setEditError("Please enter a valid product name and non-negative selling price.");
+      return;
+    }
+
+    setIsEditSaving(true);
+    setEditError(null);
+
+    const formData = new FormData();
+    formData.append('productId', editingProduct.id);
+    formData.append('shopId', shopId);
+    formData.append('name', editName.trim());
+    formData.append('sellingPrice', editPrice);
+    formData.append('barcode', editBarcode.trim());
+    formData.append('stock', editStock.trim());
+
+    try {
+      const res = await updateProductDetails(formData);
+      if (res && res.error) {
+        setEditError(res.error);
+      } else {
+        setEditingProduct(null);
+      }
+    } catch (err) {
+      console.error("Save edit failed:", err);
+      setEditError("Failed to update product details.");
+    } finally {
+      setIsEditSaving(false);
+    }
+  };
 
   const filteredLogs = useMemo(() => {
     return initialLogs.filter((log) => {
@@ -611,29 +664,42 @@ export default function ProductsDashboardClient({
                         )}
                       </td>
 
-                      {/* Delete / Restore Action */}
+                      {/* Delete / Restore / Edit Action */}
                       <td className="py-4 px-4 text-center">
-                        {p.archived ? (
-                          <button
-                            type="button"
-                            onClick={() => executeUnarchive(p.id)}
-                            disabled={savingProductId === p.id}
-                            className="p-2 bg-gray-950 hover:bg-emerald-950 border border-gray-800 hover:border-emerald-500/40 text-gray-500 hover:text-emerald-400 rounded-xl transition-all cursor-pointer disabled:opacity-40 active:scale-95"
-                            title={`Restore ${p.name}`}
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setProductToDelete({ id: p.id, name: p.name })}
-                            disabled={savingProductId === p.id}
-                            className="p-2 bg-gray-950 hover:bg-rose-950 border border-gray-800 hover:border-rose-500/40 text-gray-550 hover:text-rose-450 rounded-xl transition-all cursor-pointer disabled:opacity-40 active:scale-95"
-                            title={`Delete ${p.name}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
+                        <div className="flex items-center justify-center gap-1.5">
+                          {!p.archived && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(p)}
+                              disabled={savingProductId === p.id}
+                              className="p-2 bg-gray-950 hover:bg-indigo-950 border border-gray-800 hover:border-indigo-500/40 text-gray-400 hover:text-indigo-300 rounded-xl transition-all cursor-pointer disabled:opacity-40 active:scale-95"
+                              title={`Edit ${p.name}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                          )}
+                          {p.archived ? (
+                            <button
+                              type="button"
+                              onClick={() => executeUnarchive(p.id)}
+                              disabled={savingProductId === p.id}
+                              className="p-2 bg-gray-950 hover:bg-emerald-950 border border-gray-800 hover:border-emerald-500/40 text-gray-500 hover:text-emerald-400 rounded-xl transition-all cursor-pointer disabled:opacity-40 active:scale-95"
+                              title={`Restore ${p.name}`}
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setProductToDelete({ id: p.id, name: p.name })}
+                              disabled={savingProductId === p.id}
+                              className="p-2 bg-gray-950 hover:bg-rose-950 border border-gray-800 hover:border-rose-500/40 text-gray-550 hover:text-rose-450 rounded-xl transition-all cursor-pointer disabled:opacity-40 active:scale-95"
+                              title={`Delete ${p.name}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -922,6 +988,112 @@ export default function ProductsDashboardClient({
                 </>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Product Modal */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-gray-850 border border-gray-800 rounded-2xl p-6 shadow-2xl space-y-4 animate-in zoom-in duration-200">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-600/20 text-indigo-400 rounded-xl border border-indigo-500/20">
+                  <Pencil className="h-4 w-4" />
+                </div>
+                <h3 className="font-extrabold text-base text-gray-100">Edit Product Details</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingProduct(null)}
+                className="p-1 text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {editError && (
+              <p className="text-xs text-rose-300 font-semibold bg-rose-500/10 border border-rose-500/20 py-2.5 px-4 rounded-xl">
+                ⚠️ {editError}
+              </p>
+            )}
+
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-300 mb-1">Product Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="e.g. Milk 500ml"
+                  className="w-full px-3.5 py-2.5 bg-gray-900 border border-gray-750 focus:border-indigo-500 rounded-xl text-sm font-semibold text-white focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-300 mb-1">Selling Price (₹) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full px-3.5 py-2.5 bg-gray-900 border border-gray-750 focus:border-indigo-500 rounded-xl text-sm font-semibold text-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-300 mb-1">Stock Level</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editStock}
+                    onChange={(e) => setEditStock(e.target.value)}
+                    placeholder="Untracked"
+                    className="w-full px-3.5 py-2.5 bg-gray-900 border border-gray-750 focus:border-indigo-500 rounded-xl text-sm font-semibold text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-300 mb-1">Barcode (Optional)</label>
+                <input
+                  type="text"
+                  value={editBarcode}
+                  onChange={(e) => setEditBarcode(e.target.value)}
+                  placeholder="Scan or type barcode"
+                  className="w-full px-3.5 py-2.5 bg-gray-900 border border-gray-750 focus:border-indigo-500 rounded-xl text-sm font-semibold text-white focus:outline-none font-mono"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="w-1/2 py-2.5 bg-gray-800 hover:bg-gray-750 text-gray-300 text-xs font-bold rounded-xl border border-gray-750 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isEditSaving}
+                  className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-indigo-950/20 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {isEditSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-white" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

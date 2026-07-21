@@ -128,6 +128,93 @@ export async function addProductToCatalog(formData: FormData) {
   return { success: true };
 }
 
+export async function updateProductDetails(formData: FormData) {
+  const user = await stackServerApp.getUser({ or: 'throw' });
+  const productId = formData.get('productId') as string;
+  const shopId = formData.get('shopId') as string;
+  const name = (formData.get('name') as string)?.trim();
+  const sellingPrice = Number(formData.get('sellingPrice'));
+  const barcode = (formData.get('barcode') as string)?.trim() || null;
+  const stockInput = formData.get('stock') as string;
+  const isUntracked = stockInput === 'untracked' || stockInput === '' || stockInput === null;
+  const stock = !isUntracked && stockInput !== 'untracked' && stockInput.trim() !== '' ? Math.floor(Number(stockInput)) : null;
+
+  if (!productId || !shopId || !name || isNaN(sellingPrice) || sellingPrice < 0) {
+    return { error: 'Invalid product name or selling price.' };
+  }
+
+  if (stock !== null && isNaN(stock)) {
+    return { error: 'Invalid stock quantity. Must be a valid integer.' };
+  }
+
+  // Verify shop authorization
+  const isOwner = await prisma.shop.findFirst({ where: { id: shopId, ownerId: user.id } });
+  const isStaff = await prisma.staffMembership.findFirst({ where: { shopId, userId: user.id } });
+  if (!isOwner && !isStaff) return { error: 'Not authorized.' };
+
+  // Verify product exists in shop
+  const currentProduct = await prisma.product.findFirst({
+    where: { id: productId, shopId },
+  });
+  if (!currentProduct) return { error: 'Product not found.' };
+
+  // Check barcode uniqueness excluding current product
+  if (barcode) {
+    const existingBarcode = await prisma.product.findFirst({
+      where: { shopId, barcode, id: { not: productId } },
+    });
+    if (existingBarcode) {
+      return { error: `Barcode "${barcode}" is already assigned to "${existingBarcode.name}".` };
+    }
+  }
+
+  // Check product name uniqueness excluding current product
+  const existingName = await prisma.product.findFirst({
+    where: {
+      shopId,
+      archived: false,
+      id: { not: productId },
+      name: {
+        equals: name,
+        mode: 'insensitive',
+      },
+    },
+  });
+  if (existingName) {
+    return { error: `Another active product is already named "${name}".` };
+  }
+
+  // Log stock adjustment if stock level changed
+  if (currentProduct.stock !== stock) {
+    const diff = (stock ?? 0) - (currentProduct.stock ?? 0);
+    await prisma.stockAdjustmentLog.create({
+      data: {
+        productId,
+        shopId,
+        staffId: user.id,
+        staffName: user.primaryEmail || user.displayName || 'Staff',
+        oldStock: currentProduct.stock,
+        newStock: stock,
+        change: diff,
+      },
+    });
+  }
+
+  await prisma.product.update({
+    where: { id: productId },
+    data: {
+      name,
+      sellingPrice,
+      barcode,
+      stock,
+    },
+  });
+
+  revalidatePath(`/shop/${shopId}`);
+  revalidatePath(`/shop/${shopId}/products`);
+  return { success: true };
+}
+
 // ----------------------------------------------------
 // Khata: Customer Actions
 // ----------------------------------------------------
