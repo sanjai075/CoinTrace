@@ -140,9 +140,9 @@ export default function AddBillClient({
             }
           } as unknown as { fps: number },
           (decodedText) => {
-            // Debounce logic (prevent duplicate fast scans of the same code within 1.5 seconds)
+            // Debounce logic (prevent duplicate fast scans of the same code within 2.5 seconds)
             const now = Date.now();
-            if (lastScanRef.current && lastScanRef.current.code === decodedText && now - lastScanRef.current.time < 1500) {
+            if (lastScanRef.current && lastScanRef.current.code === decodedText && now - lastScanRef.current.time < 2500) {
               return;
             }
             lastScanRef.current = { code: decodedText, time: now };
