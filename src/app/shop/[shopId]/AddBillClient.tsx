@@ -22,6 +22,27 @@ interface CustomerItem {
   runningBalance: number;
 }
 
+function selectBestCameraId(devices: Array<{ id: string; label: string }>): string | { facingMode: string } {
+  if (!devices || devices.length === 0) return { facingMode: "environment" };
+
+  const backCameras = devices.filter((d) => {
+    const label = d.label.toLowerCase();
+    return !label.includes("front") && !label.includes("user") && !label.includes("selfie") && !label.includes("depth");
+  });
+
+  if (backCameras.length > 0) {
+    const primaryMatch = backCameras.find((d) => {
+      const label = d.label.toLowerCase();
+      return label.includes("main") || label.includes("primary") || label.includes("back 0") || label.includes("0, facing back");
+    });
+    if (primaryMatch && primaryMatch.id) return primaryMatch.id;
+
+    return backCameras[backCameras.length - 1].id;
+  }
+
+  return devices[devices.length - 1].id || { facingMode: "environment" };
+}
+
 export default function AddBillClient({
   shopId,
   products,
@@ -47,8 +68,6 @@ export default function AddBillClient({
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
-  const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
-  const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
 
   const qrCodeRef = useRef<Html5Qrcode | null>(null);
   const startPromiseRef = useRef<Promise<unknown> | null>(null);
@@ -79,22 +98,21 @@ export default function AddBillClient({
     setScanError(null);
     setScanMessage(null);
 
-    let isMounted = true;
-    Html5Qrcode.getCameras()
-      .then((devices) => {
-        if (isMounted && devices && devices.length > 0) {
-          setAvailableCameras(devices.map((d, i) => ({ id: d.id, label: d.label || `Camera ${i + 1}` })));
-        }
-      })
-      .catch((e) => console.warn("Camera enum info:", e));
-
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       try {
         const scanner = new Html5Qrcode("billingQrReader");
         qrCodeRef.current = scanner;
 
+        let cameraConstraint: string | { facingMode: string } = { facingMode: "environment" };
+        try {
+          const devices = await Html5Qrcode.getCameras();
+          cameraConstraint = selectBestCameraId(devices || []);
+        } catch (e) {
+          console.warn("Camera enum fallback:", e);
+        }
+
         const startPromise = scanner.start(
-          { facingMode: "environment" },
+          cameraConstraint,
           {
             fps: 25,
             qrbox: (width: number, height: number) => {
@@ -184,7 +202,6 @@ export default function AddBillClient({
     }, 20);
 
     return () => {
-      isMounted = false;
       clearTimeout(timer);
       const scanner = qrCodeRef.current;
       if (scanner) {
@@ -200,60 +217,6 @@ export default function AddBillClient({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isScanning, products]);
-
-  const handleSwitchCamera = async () => {
-    if (availableCameras.length <= 1 || !qrCodeRef.current) return;
-    const nextIdx = (currentCameraIndex + 1) % availableCameras.length;
-    setCurrentCameraIndex(nextIdx);
-    const nextCamera = availableCameras[nextIdx];
-
-    setScanError(null);
-    try {
-      const scanner = qrCodeRef.current;
-      if (scanner.isScanning) {
-        await scanner.stop();
-      }
-      const startPromise = scanner.start(
-        nextCamera.id,
-        {
-          fps: 25,
-          qrbox: (width: number, height: number) => ({
-            width: Math.min(width * 0.85, 320),
-            height: Math.min(height * 0.55, 180)
-          }),
-          experimentalFeatures: { useBarCodeDetectorIfSupported: true }
-        } as unknown as { fps: number },
-        (decodedText) => {
-          const now = Date.now();
-          if (lastScanRef.current && lastScanRef.current.code === decodedText && now - lastScanRef.current.time < 1500) {
-            return;
-          }
-          lastScanRef.current = { code: decodedText, time: now };
-          const matched = products.find(p => p.barcode === decodedText);
-          if (matched) {
-            const errResult = addToCart(matched.id);
-            if (errResult) {
-              setScanError(errResult);
-              setScanMessage(null);
-            } else {
-              playBeep();
-              setScanError(null);
-              setScanMessage(`Added ${matched.name} to cart!`);
-              setTimeout(() => setScanMessage(null), 1200);
-            }
-          } else {
-            setScanError(`Barcode not found in catalog: ${decodedText}`);
-            setScanMessage(null);
-          }
-        },
-        () => {}
-      );
-      startPromiseRef.current = startPromise;
-    } catch (e) {
-      console.error("Camera switch error:", e);
-      setScanError("Failed to switch camera lens.");
-    }
-  };
 
   const handleCloseScan = async () => {
     setIsScanning(false);
@@ -671,16 +634,6 @@ export default function AddBillClient({
                   </button>
                 )}
               </div>
-            )}
-
-            {availableCameras.length > 1 && (
-              <button
-                onClick={handleSwitchCamera}
-                className="w-full py-2.5 bg-gray-800 hover:bg-gray-750 text-indigo-300 font-bold rounded-xl border border-indigo-500/30 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Switch Camera Lens ({currentCameraIndex + 1}/{availableCameras.length})
-              </button>
             )}
 
             <button
