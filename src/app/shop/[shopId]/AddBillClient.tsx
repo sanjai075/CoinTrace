@@ -129,10 +129,10 @@ export default function AddBillClient({
           {
             fps: 30,
             qrbox: (width: number, height: number) => {
-              // Maximized scanning window: 320px wide by 180px tall
+              // Ultra-wide scanning window (95% width, 75% height) for instant full-frame barcode capture
               return {
-                width: Math.min(width * 0.85, 320),
-                height: Math.min(height * 0.55, 180)
+                width: Math.min(width * 0.95, 360),
+                height: Math.min(height * 0.75, 240)
               };
             },
             experimentalFeatures: {

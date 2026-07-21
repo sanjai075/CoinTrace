@@ -78,10 +78,10 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
           {
             fps: 30,
             qrbox: (width: number, height: number) => {
-              // Perfect rectangular target box for scanning thin barcodes
+              // Ultra-wide scanning window (95% width, 75% height) for instant full-frame barcode capture
               return {
-                width: Math.min(width * 0.8, 280),
-                height: Math.min(height * 0.4, 110)
+                width: Math.min(width * 0.95, 360),
+                height: Math.min(height * 0.75, 240)
               };
             },
             experimentalFeatures: {
