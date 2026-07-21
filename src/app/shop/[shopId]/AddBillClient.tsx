@@ -22,25 +22,44 @@ interface CustomerItem {
   runningBalance: number;
 }
 
-function selectBestCameraId(devices: Array<{ id: string; label: string }>): string | { facingMode: string } {
-  if (!devices || devices.length === 0) return { facingMode: "environment" };
+const CAMERA_CACHE_KEY = 'cointrace_preferred_camera_id';
 
-  const backCameras = devices.filter((d) => {
-    const label = d.label.toLowerCase();
-    return !label.includes("front") && !label.includes("user") && !label.includes("selfie") && !label.includes("depth");
-  });
-
-  if (backCameras.length > 0) {
-    const primaryMatch = backCameras.find((d) => {
-      const label = d.label.toLowerCase();
-      return label.includes("main") || label.includes("primary") || label.includes("back 0") || label.includes("0, facing back");
-    });
-    if (primaryMatch && primaryMatch.id) return primaryMatch.id;
-
-    return backCameras[backCameras.length - 1].id;
+async function getOrSelectBestCameraId(): Promise<string | { facingMode: string }> {
+  if (typeof window !== 'undefined') {
+    const cachedId = localStorage.getItem(CAMERA_CACHE_KEY);
+    if (cachedId) {
+      return cachedId;
+    }
   }
 
-  return devices[devices.length - 1].id || { facingMode: "environment" };
+  try {
+    const devices = await Html5Qrcode.getCameras();
+    if (!devices || devices.length === 0) return { facingMode: "environment" };
+
+    const backCameras = devices.filter((d) => {
+      const label = d.label.toLowerCase();
+      return !label.includes("front") && !label.includes("user") && !label.includes("selfie") && !label.includes("depth");
+    });
+
+    let selectedId = "";
+    if (backCameras.length > 0) {
+      const primaryMatch = backCameras.find((d) => {
+        const label = d.label.toLowerCase();
+        return label.includes("main") || label.includes("primary") || label.includes("back 0") || label.includes("0, facing back");
+      });
+      selectedId = (primaryMatch && primaryMatch.id) || backCameras[backCameras.length - 1].id;
+    } else {
+      selectedId = devices[devices.length - 1].id;
+    }
+
+    if (selectedId && typeof window !== 'undefined') {
+      localStorage.setItem(CAMERA_CACHE_KEY, selectedId);
+    }
+    return selectedId || { facingMode: "environment" };
+  } catch (e) {
+    console.warn("Camera enum fallback:", e);
+    return { facingMode: "environment" };
+  }
 }
 
 export default function AddBillClient({
@@ -103,18 +122,12 @@ export default function AddBillClient({
         const scanner = new Html5Qrcode("billingQrReader");
         qrCodeRef.current = scanner;
 
-        let cameraConstraint: string | { facingMode: string } = { facingMode: "environment" };
-        try {
-          const devices = await Html5Qrcode.getCameras();
-          cameraConstraint = selectBestCameraId(devices || []);
-        } catch (e) {
-          console.warn("Camera enum fallback:", e);
-        }
+        const cameraConstraint = await getOrSelectBestCameraId();
 
         const startPromise = scanner.start(
           cameraConstraint,
           {
-            fps: 25,
+            fps: 30,
             qrbox: (width: number, height: number) => {
               // Maximized scanning window: 320px wide by 180px tall
               return {
@@ -192,6 +205,9 @@ export default function AddBillClient({
           })
           .catch((err) => {
             console.error("Camera fail:", err);
+            if (typeof window !== "undefined") {
+              localStorage.removeItem(CAMERA_CACHE_KEY);
+            }
             setScanError("Camera failed to start. Please grant camera permission.");
           });
 
