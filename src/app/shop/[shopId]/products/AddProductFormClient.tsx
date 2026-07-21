@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useTransition } from 'react';
 import { addProductToCatalog } from '@/app/actions/kirana';
 import { useTranslations } from 'next-intl';
-import { Plus, Camera, X } from 'lucide-react';
+import { Plus, Camera, X, RefreshCw } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
 export default function AddProductFormClient({ shopId }: { shopId: string }) {
@@ -13,6 +13,9 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
   const [scanError, setScanError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
+  const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
 
   const qrCodeRef = useRef<Html5Qrcode | null>(null);
   const startPromiseRef = useRef<Promise<unknown> | null>(null);
@@ -26,7 +29,15 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
 
     setScanError(null);
 
-    // Give the DOM a tiny frame to mount the #addProductQrReader container
+    let isMounted = true;
+    Html5Qrcode.getCameras()
+      .then((devices) => {
+        if (isMounted && devices && devices.length > 0) {
+          setAvailableCameras(devices.map((d, i) => ({ id: d.id, label: d.label || `Camera ${i + 1}` })));
+        }
+      })
+      .catch((e) => console.warn("Camera enum info:", e));
+
     const timer = setTimeout(() => {
       try {
         const scanner = new Html5Qrcode("addProductQrReader");
@@ -98,9 +109,10 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
         console.error("Scanner setup fail:", err);
         setScanError("Scanner failed to initialize.");
       }
-    }, 150);
+    }, 20);
 
     return () => {
+      isMounted = false;
       clearTimeout(timer);
       const scanner = qrCodeRef.current;
       if (scanner) {
@@ -115,6 +127,41 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
       }
     };
   }, [isScanning]);
+
+  const handleSwitchCamera = async () => {
+    if (availableCameras.length <= 1 || !qrCodeRef.current) return;
+    const nextIdx = (currentCameraIndex + 1) % availableCameras.length;
+    setCurrentCameraIndex(nextIdx);
+    const nextCamera = availableCameras[nextIdx];
+
+    setScanError(null);
+    try {
+      const scanner = qrCodeRef.current;
+      if (scanner.isScanning) {
+        await scanner.stop();
+      }
+      const startPromise = scanner.start(
+        nextCamera.id,
+        {
+          fps: 25,
+          qrbox: (width: number, height: number) => ({
+            width: Math.min(width * 0.8, 280),
+            height: Math.min(height * 0.4, 110)
+          }),
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+        } as unknown as { fps: number },
+        (decodedText) => {
+          setBarcode(decodedText);
+          handleCloseScan();
+        },
+        () => {}
+      );
+      startPromiseRef.current = startPromise;
+    } catch (e) {
+      console.error("Camera switch error:", e);
+      setScanError("Failed to switch camera lens.");
+    }
+  };
 
   const handleCloseScan = async () => {
     setIsScanning(false);
@@ -306,6 +353,16 @@ export default function AddProductFormClient({ shopId }: { shopId: string }) {
                   </button>
                 )}
               </div>
+            )}
+
+            {availableCameras.length > 1 && (
+              <button
+                onClick={handleSwitchCamera}
+                className="w-full py-2.5 bg-gray-800 hover:bg-gray-750 text-indigo-300 font-bold rounded-xl border border-indigo-500/30 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Switch Camera Lens ({currentCameraIndex + 1}/{availableCameras.length})
+              </button>
             )}
 
             <button
