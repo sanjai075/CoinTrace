@@ -30,23 +30,28 @@ export default async function ProductsPage(props: {
     );
   }
 
-  // Fetch shop products
-  const products = await prisma.product.findMany({
-    where: { shopId },
-    orderBy: { name: 'asc' },
-  });
-
-  // Fetch recent stock adjustment logs (last 50 edits)
-  const stockLogs = await prisma.stockAdjustmentLog.findMany({
-    where: { shopId },
-    include: {
-      product: {
-        select: { name: true }
-      }
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  });
+  // Fetch products, logs, and shops in parallel
+  const [products, stockLogs, myShops] = await Promise.all([
+    prisma.product.findMany({
+      where: { shopId },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.stockAdjustmentLog.findMany({
+      where: { shopId },
+      include: {
+        product: {
+          select: { name: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    }),
+    prisma.shop.findMany({
+      where: { ownerId: user.id },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    })
+  ]);
 
   const formattedLogs = stockLogs.map(log => ({
     id: log.id,
@@ -57,13 +62,6 @@ export default async function ProductsPage(props: {
     change: log.change,
     createdAt: log.createdAt.toISOString(),
   }));
-
-  // Fetch owned shops only for catalog cloning (Security Rule)
-  const myShops = await prisma.shop.findMany({
-    where: { ownerId: user.id },
-    select: { id: true, name: true },
-    orderBy: { name: 'asc' },
-  });
 
   return (
     <main className="min-h-screen w-full p-4 md:p-8 bg-gray-900 text-white flex flex-col items-center overflow-x-hidden">

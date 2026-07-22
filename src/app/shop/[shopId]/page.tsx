@@ -49,43 +49,23 @@ export default async function ShopPage(props: {
     );
   }
 
-  // Fetch all shops for the switcher dropdown (owned + staff)
-  const ownedShops = await prisma.shop.findMany({
-    where: { ownerId: user.id },
-    select: { id: true, name: true }
-  });
-  const staffMemberships = await prisma.staffMembership.findMany({
-    where: { userId: user.id },
-    include: { shop: { select: { id: true, name: true } } }
-  });
-  const myShops = [...ownedShops, ...staffMemberships.map(m => m.shop)];
-
-  // Fetch emails of staff members working in other shops owned by this user
-  let existingStaffEmails: Array<{ email: string; name: string }> = [];
-  if (isOwner) {
-    const otherStaff = await prisma.staffMembership.findMany({
-      where: {
-        shop: {
-          ownerId: user.id,
-          NOT: { id: shopId } // exclude this shop
-        }
-      },
-      include: {
-        user: { select: { email: true, name: true } }
-      }
-    });
-    // Filter duplicates
-    const uniqueMap = new Map<string, string>();
-    otherStaff.forEach(s => {
-      if (s.user.email) {
-        uniqueMap.set(s.user.email, s.user.name || 'Staff Member');
-      }
-    });
-    existingStaffEmails = Array.from(uniqueMap.entries()).map(([email, name]) => ({ email, name }));
-  }
-
-  // Fetch products, customers, and workers in parallel
-  const [products, customers, workers] = await Promise.all([
+  // Fetch all other required data in parallel after validating the shop membership
+  const [
+    ownedShops,
+    staffMemberships,
+    products,
+    customers,
+    workers,
+    otherStaff
+  ] = await Promise.all([
+    prisma.shop.findMany({
+      where: { ownerId: user.id },
+      select: { id: true, name: true }
+    }),
+    prisma.staffMembership.findMany({
+      where: { userId: user.id },
+      include: { shop: { select: { id: true, name: true } } }
+    }),
     prisma.product.findMany({
       where: { shopId, archived: false },
       select: { id: true, name: true, sellingPrice: true, barcode: true, stock: true },
@@ -101,7 +81,34 @@ export default async function ShopPage(props: {
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),
+    isOwner
+      ? prisma.staffMembership.findMany({
+          where: {
+            shop: {
+              ownerId: user.id,
+              NOT: { id: shopId } // exclude this shop
+            }
+          },
+          include: {
+            user: { select: { email: true, name: true } }
+          }
+        })
+      : Promise.resolve([])
   ]);
+
+  const myShops = [...ownedShops, ...staffMemberships.map(m => m.shop)];
+
+  // Fetch emails of staff members working in other shops owned by this user
+  let existingStaffEmails: Array<{ email: string; name: string }> = [];
+  if (isOwner && otherStaff.length > 0) {
+    const uniqueMap = new Map<string, string>();
+    otherStaff.forEach(s => {
+      if (s.user.email) {
+        uniqueMap.set(s.user.email, s.user.name || 'Staff Member');
+      }
+    });
+    existingStaffEmails = Array.from(uniqueMap.entries()).map(([email, name]) => ({ email, name }));
+  }
 
   return (
     <main className="flex min-h-screen w-full flex-col items-center p-4 md:p-6 bg-gray-900 text-white overflow-x-hidden">

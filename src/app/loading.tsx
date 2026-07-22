@@ -17,7 +17,7 @@ export default function Loading() {
             CoinTrace
           </h2>
           <p className="text-[10px] text-gray-500 font-bold tracking-wider uppercase animate-pulse duration-1000">
-            Checking Session...
+            Syncing CoinTrace...
           </p>
         </div>
       </div>
