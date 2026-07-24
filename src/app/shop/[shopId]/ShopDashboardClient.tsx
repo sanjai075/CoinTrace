@@ -9,7 +9,7 @@ import AddBillClient from './AddBillClient';
 import WorkerPinModal from '@/components/WorkerPinModal';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { addWorker } from '@/app/actions/kirana';
-import { addStaffToShop, removeStaffFromShop, cancelStaffInvitation } from '@/app/actions/staff';
+import { addStaffToShop, removeStaffFromShop } from '@/app/actions/staff';
 import { useSearchParams } from 'next/navigation';
 import { ENABLE_CREDIT_CUSTOMER, ENABLE_SUPPLIER_LEDGER, ENABLE_EXPENSES } from '@/lib/features';
 import { 
@@ -48,12 +48,6 @@ interface StaffMemberItem {
   name: string | null;
 }
 
-interface StaffInvitationItem {
-  id: string;
-  email: string;
-  createdAt: Date;
-}
-
 export default function ShopDashboardClient({
   shop,
   isOwner,
@@ -63,7 +57,6 @@ export default function ShopDashboardClient({
   myShops,
   staffMemberships,
   existingStaffEmails = [],
-  staffInvitations = [],
 }: {
   shop: { id: string; name: string };
   isOwner: boolean;
@@ -73,7 +66,6 @@ export default function ShopDashboardClient({
   myShops: ShopItem[];
   staffMemberships: StaffMemberItem[];
   existingStaffEmails?: Array<{ email: string; name: string }>;
-  staffInvitations?: StaffInvitationItem[];
 }) {
   const t = useTranslations();
   const router = useRouter();
@@ -516,32 +508,6 @@ export default function ShopDashboardClient({
                               className="text-[9px] text-rose-450 hover:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded transition-colors cursor-pointer"
                             >
                               Remove
-                            </button>
-                          </form>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {/* List of pending Invitations */}
-                  {staffInvitations && staffInvitations.length > 0 && (
-                    <div className="space-y-1.5 pt-2 border-t border-gray-800/60">
-                      <p className="text-[10px] font-bold text-gray-500 uppercase">Pending Invitations</p>
-                      {staffInvitations.map((invite) => (
-                        <div key={invite.id} className="text-xs text-gray-300 py-1.5 flex items-center justify-between bg-gray-900/10 px-2 rounded-lg border border-gray-850/40 border-dashed">
-                          <div className="flex flex-col min-w-0 pr-2">
-                            <span className="font-semibold text-gray-400 truncate">
-                              {invite.email}
-                            </span>
-                            <span className="text-[8px] text-indigo-400 font-bold">Waiting for acceptance</span>
-                          </div>
-                          <form action={cancelStaffInvitation}>
-                            <input type="hidden" name="shopId" value={shop.id} />
-                            <input type="hidden" name="invitationId" value={invite.id} />
-                            <button
-                              type="submit"
-                              className="text-[9px] text-gray-500 hover:text-rose-400 bg-gray-900 hover:bg-rose-500/10 px-2 py-1 rounded transition-colors cursor-pointer border border-gray-800 hover:border-rose-950"
-                            >
-                              Cancel
                             </button>
                           </form>
                         </div>

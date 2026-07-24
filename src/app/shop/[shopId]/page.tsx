@@ -56,8 +56,7 @@ export default async function ShopPage(props: {
     products,
     customers,
     workers,
-    otherStaff,
-    staffInvitations
+    otherStaff
   ] = await Promise.all([
     prisma.shop.findMany({
       where: { ownerId: user.id },
@@ -93,13 +92,6 @@ export default async function ShopPage(props: {
           include: {
             user: { select: { email: true, name: true } }
           }
-        })
-      : Promise.resolve([]),
-    isOwner
-      ? prisma.staffInvitation.findMany({
-          where: { shopId },
-          select: { id: true, email: true, createdAt: true },
-          orderBy: { createdAt: 'desc' },
         })
       : Promise.resolve([])
   ]);
@@ -144,7 +136,6 @@ export default async function ShopPage(props: {
         workers={workers}
         myShops={myShops}
         existingStaffEmails={existingStaffEmails}
-        staffInvitations={staffInvitations}
         staffMemberships={shop.staffMemberships.map((m) => ({
           id: m.user.id,
           email: m.user.email,
