@@ -2,6 +2,8 @@
 
 import { useShopStore } from '@/store/useShopStore';
 import { useTranslations } from 'next-intl';
+import { Trash2 } from 'lucide-react';
+import { deleteExpense } from '@/app/actions/kirana';
 
 interface ExpenseItem {
   id: string;
@@ -12,8 +14,10 @@ interface ExpenseItem {
 }
 
 export default function RecentExpensesList({
+  shopId,
   expenses,
 }: {
+  shopId: string;
   expenses: ExpenseItem[];
 }) {
   const t = useTranslations();
@@ -56,9 +60,28 @@ export default function RecentExpensesList({
                   {new Date(exp.createdAt).toLocaleDateString()}
                 </p>
               </div>
-              <span className="font-bold text-sm text-rose-400">
-                - ₹{exp.amount.toFixed(2)}
-              </span>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="font-bold text-sm text-rose-400">
+                  - ₹{exp.amount.toFixed(2)}
+                </span>
+                <form
+                  action={async (formData) => {
+                    if (confirm("Are you sure you want to delete this expense?")) {
+                      await deleteExpense(formData);
+                    }
+                  }}
+                >
+                  <input type="hidden" name="shopId" value={shopId} />
+                  <input type="hidden" name="expenseId" value={exp.id} />
+                  <button
+                    type="submit"
+                    className="p-1.5 text-gray-500 hover:text-rose-450 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                    title="Delete Expense"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </form>
+              </div>
             </div>
           ))}
         </div>

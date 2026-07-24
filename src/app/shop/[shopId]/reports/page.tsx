@@ -3,8 +3,9 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { ArrowLeft, BarChart2, Share2, ChevronDown } from 'lucide-react';
+import { ArrowLeft, BarChart2, Share2, ChevronDown, Trash2 } from 'lucide-react';
 import { ENABLE_CREDIT_CUSTOMER, ENABLE_EXPENSES, ENABLE_WHATSAPP_SHARE } from '@/lib/features';
+import { deleteExpense } from '@/app/actions/kirana';
 import ReportDatePickerClient from './ReportDatePickerClient';
 import QuickExpenseForm from './QuickExpenseForm';
 
@@ -345,6 +346,53 @@ export default async function ReportsPage(props: {
                     </span>
                   </div>
 
+                  {/* Logged Expenses List with Delete option */}
+                  {expenses.length > 0 && (
+                    <div className="border-t border-gray-800/60 pt-3.5 mt-2 space-y-2">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Logged Expenses</p>
+                      <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
+                        {expenses.map((exp) => (
+                          <div
+                            key={exp.id}
+                            className="flex items-center justify-between p-2.5 bg-gray-900/50 rounded-xl border border-gray-800/80"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <span className="text-xs font-semibold text-gray-200 block truncate">
+                                {exp.notes || t(`expenses.categories.${exp.category}`) || exp.category}
+                              </span>
+                              {exp.notes && (
+                                <span className="text-[9px] text-gray-500 block mt-0.5">
+                                  Category: {t(`expenses.categories.${exp.category}`) || exp.category}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs font-bold text-rose-450">
+                                -₹{exp.amount.toFixed(2)}
+                              </span>
+                              <form action={deleteExpense}>
+                                <input type="hidden" name="shopId" value={shopId} />
+                                <input type="hidden" name="expenseId" value={exp.id} />
+                                <input
+                                  type="hidden"
+                                  name="redirectTo"
+                                  value={`/shop/${shopId}/reports?startDate=${startDateStr}&endDate=${endDateStr}`}
+                                />
+                                <button
+                                  type="submit"
+                                  className="p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition-colors cursor-pointer"
+                                  title="Delete Expense"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </form>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Add Quick Expense inline */}
                   <div className="border-t border-gray-800/40 pt-3.5 mt-2">
                     <QuickExpenseForm shopId={shopId} />
@@ -394,6 +442,53 @@ export default async function ReportsPage(props: {
                       ₹{(totalSales - totalExpenses).toFixed(2)}
                     </span>
                   </div>
+
+                  {/* Logged Expenses List with Delete option */}
+                  {expenses.length > 0 && (
+                    <div className="border-t border-gray-800/60 pt-3.5 mt-2 space-y-2">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Logged Expenses</p>
+                      <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
+                        {expenses.map((exp) => (
+                          <div
+                            key={exp.id}
+                            className="flex items-center justify-between p-2.5 bg-gray-900/50 rounded-xl border border-gray-800/80"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <span className="text-xs font-semibold text-gray-200 block truncate">
+                                {exp.notes || t(`expenses.categories.${exp.category}`) || exp.category}
+                              </span>
+                              {exp.notes && (
+                                <span className="text-[9px] text-gray-500 block mt-0.5">
+                                  Category: {t(`expenses.categories.${exp.category}`) || exp.category}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs font-bold text-rose-450">
+                                -₹{exp.amount.toFixed(2)}
+                              </span>
+                              <form action={deleteExpense}>
+                                <input type="hidden" name="shopId" value={shopId} />
+                                <input type="hidden" name="expenseId" value={exp.id} />
+                                <input
+                                  type="hidden"
+                                  name="redirectTo"
+                                  value={`/shop/${shopId}/reports?startDate=${startDateStr}&endDate=${endDateStr}`}
+                                />
+                                <button
+                                  type="submit"
+                                  className="p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-md transition-colors cursor-pointer"
+                                  title="Delete Expense"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </form>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Add Quick Expense inline */}
                   <div className="border-t border-gray-800/40 pt-3.5 mt-3">

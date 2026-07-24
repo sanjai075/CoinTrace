@@ -132,7 +132,7 @@ export default async function ExpensesPage(props: {
         </div>
 
         {/* Expenses List */}
-        <RecentExpensesList expenses={expenses} />
+        <RecentExpensesList shopId={shopId} expenses={expenses} />
 
       </div>
     </main>

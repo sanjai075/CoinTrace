@@ -4,6 +4,7 @@ import { stackServerApp } from '@/stack/server';
 import { prisma } from '@/lib/prisma';
 import { SaleType, CustomerTxType, SupplierTxType, ExpenseCategory } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import crypto from 'crypto';
 
 // Helper to hash 4-digit pin using standard Node crypto
@@ -372,6 +373,33 @@ export async function addExpense(formData: FormData) {
   });
 
   revalidatePath(`/shop/${shopId}`);
+}
+
+export async function deleteExpense(formData: FormData) {
+  const user = await stackServerApp.getUser({ or: 'throw' });
+  const shopId = formData.get('shopId') as string;
+  const expenseId = formData.get('expenseId') as string;
+  const redirectTo = (formData.get('redirectTo') as string) || null;
+
+  if (!shopId || !expenseId) {
+    throw new Error('Missing shopId or expenseId');
+  }
+
+  const isOwner = await prisma.shop.findFirst({ where: { id: shopId, ownerId: user.id } });
+  const isStaff = await prisma.staffMembership.findFirst({ where: { shopId, userId: user.id } });
+  if (!isOwner && !isStaff) throw new Error('Not authorized.');
+
+  await prisma.expense.delete({
+    where: { id: expenseId, shopId },
+  });
+
+  revalidatePath(`/shop/${shopId}`);
+  revalidatePath(`/shop/${shopId}/expenses`);
+  revalidatePath(`/shop/${shopId}/reports`);
+
+  if (redirectTo) {
+    redirect(redirectTo);
+  }
 }
 
 // ----------------------------------------------------
