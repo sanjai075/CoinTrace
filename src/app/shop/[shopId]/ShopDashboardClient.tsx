@@ -9,13 +9,13 @@ import AddBillClient from './AddBillClient';
 import WorkerPinModal from '@/components/WorkerPinModal';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { addWorker } from '@/app/actions/kirana';
-import { addStaffToShop, removeStaffFromShop } from '@/app/actions/staff';
+import { addStaffToShop, removeStaffFromShop, cancelStaffInvitation } from '@/app/actions/staff';
 import { useSearchParams } from 'next/navigation';
 import { ENABLE_CREDIT_CUSTOMER, ENABLE_SUPPLIER_LEDGER, ENABLE_EXPENSES } from '@/lib/features';
 import { 
   Package, Users, Truck, BarChart2, CreditCard, 
   Lock, Unlock, ShoppingBag, Store, UserPlus, X,
-  ChevronDown, Check
+  ChevronDown, Check, MessageSquare
 } from 'lucide-react';
 
 interface ProductItem {
@@ -48,6 +48,12 @@ interface StaffMemberItem {
   name: string | null;
 }
 
+interface StaffInvitationItem {
+  id: string;
+  phone: string;
+  createdAt: Date;
+}
+
 export default function ShopDashboardClient({
   shop,
   isOwner,
@@ -57,6 +63,7 @@ export default function ShopDashboardClient({
   myShops,
   staffMemberships,
   existingStaffEmails = [],
+  staffInvitations = [],
 }: {
   shop: { id: string; name: string };
   isOwner: boolean;
@@ -66,6 +73,7 @@ export default function ShopDashboardClient({
   myShops: ShopItem[];
   staffMemberships: StaffMemberItem[];
   existingStaffEmails?: Array<{ email: string; name: string }>;
+  staffInvitations?: StaffInvitationItem[];
 }) {
   const t = useTranslations();
   const router = useRouter();
@@ -92,8 +100,7 @@ export default function ShopDashboardClient({
   const [isOpen, setIsOpen] = useState(false);
   
   // Controlled staff invite state
-  const [staffEmailInput, setStaffEmailInput] = useState('');
-  const [isStaffPickerOpen, setIsStaffPickerOpen] = useState(false);
+  const [staffPhoneInput, setStaffPhoneInput] = useState('');
 
   // Passcode modal states
   const [showSetPinModal, setShowSetPinModal] = useState(false);
@@ -419,7 +426,7 @@ export default function ShopDashboardClient({
                 onClick={() => setShowManageStaff(!showManageStaff)}
                 className="w-full flex items-center justify-between text-left text-sm font-bold text-gray-400 uppercase tracking-wider"
               >
-                <span>Remote Staff (Email)</span>
+                <span>Remote Staff (WhatsApp Invite)</span>
                 <UserPlus className="h-4 w-4 text-indigo-400" />
               </button>
 
@@ -431,59 +438,25 @@ export default function ShopDashboardClient({
                     
                     <div className="flex items-center justify-between">
                       <label className="block text-[10px] font-bold text-gray-500 uppercase">
-                        Add Staff by Email
+                        Add Staff by Phone Number
                       </label>
-                      {existingStaffEmails && existingStaffEmails.length > 0 && (
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setIsStaffPickerOpen(!isStaffPickerOpen)}
-                            className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer transition-colors select-none"
-                          >
-                            <Users className="h-3 w-3" />
-                            Pick Hired Staff
-                          </button>
-                          {isStaffPickerOpen && (
-                            <>
-                              {/* Close click-away backdrop */}
-                              <div className="fixed inset-0 z-10" onClick={() => setIsStaffPickerOpen(false)} />
-                              <div className="absolute right-0 mt-1.5 z-25 bg-gray-900 border border-gray-800 rounded-xl shadow-xl overflow-hidden py-1 divide-y divide-gray-800/40 w-56 max-h-48 overflow-y-auto">
-                                {existingStaffEmails.map((staff) => (
-                                  <button
-                                    key={staff.email}
-                                    type="button"
-                                    onClick={() => {
-                                      setStaffEmailInput(staff.email);
-                                      setIsStaffPickerOpen(false);
-                                    }}
-                                    className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-gray-800 hover:text-white text-gray-300 transition-colors flex flex-col cursor-pointer select-none"
-                                  >
-                                    <span className="truncate text-[11px] text-gray-250 font-bold">{staff.name}</span>
-                                    <span className="text-[9px] text-gray-500 truncate mt-0.5">{staff.email}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
                     </div>
 
                     <div className="flex gap-2">
                       <input
-                        type="email"
-                        name="email"
+                        type="text"
+                        name="phone"
                         required
-                        value={staffEmailInput}
-                        onChange={(e) => setStaffEmailInput(e.target.value)}
-                        placeholder="Staff Email (e.g. staff@gmail.com)"
+                        value={staffPhoneInput}
+                        onChange={(e) => setStaffPhoneInput(e.target.value)}
+                        placeholder="Staff Phone (e.g. +91 9876543210)"
                         className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
                       />
                       <button
                         type="submit"
                         className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shrink-0"
                       >
-                        Add
+                        Generate Invite
                       </button>
                     </div>
                   </form>
@@ -512,6 +485,51 @@ export default function ShopDashboardClient({
                           </form>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* List of pending Invitations */}
+                  {staffInvitations && staffInvitations.length > 0 && (
+                    <div className="space-y-1.5 pt-2 border-t border-gray-800/60">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase">Pending Invitations</p>
+                      {staffInvitations.map((invite) => {
+                        const appUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+                        const inviteLink = `${appUrl}/invite/accept?id=${invite.id}`;
+                        const waMessage = `Hello! You have been invited to join ${shop.name} as remote staff on CoinTrace. Click here to accept the invitation: ${inviteLink}`;
+                        const waHref = `https://wa.me/${invite.phone.replace('+', '')}?text=${encodeURIComponent(waMessage)}`;
+
+                        return (
+                          <div key={invite.id} className="text-xs text-gray-300 py-1.5 flex items-center justify-between bg-gray-900/10 px-2 rounded-lg border border-gray-850/40 border-dashed">
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <span className="font-semibold text-gray-400 truncate">
+                                {invite.phone}
+                              </span>
+                              <span className="text-[8px] text-indigo-400 font-bold">Waiting for acceptance</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <a
+                                href={waHref}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-[9px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded transition-colors cursor-pointer"
+                              >
+                                <MessageSquare className="h-2.5 w-2.5" />
+                                Send
+                              </a>
+                              <form action={cancelStaffInvitation}>
+                                <input type="hidden" name="shopId" value={shop.id} />
+                                <input type="hidden" name="invitationId" value={invite.id} />
+                                <button
+                                  type="submit"
+                                  className="text-[9px] text-gray-500 hover:text-rose-455 bg-gray-900 hover:bg-rose-500/10 px-2 py-1 rounded transition-colors cursor-pointer border border-gray-800 hover:border-rose-950"
+                                >
+                                  Cancel
+                                </button>
+                              </form>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
