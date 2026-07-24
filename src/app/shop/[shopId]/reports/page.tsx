@@ -242,17 +242,11 @@ export default async function ReportsPage(props: {
 
           {/* This Month Card */}
           <div className="p-2.5 sm:p-4.5 bg-gray-850 border border-gray-800 rounded-xl sm:rounded-2xl flex flex-col justify-start shadow-md hover:border-gray-700 transition-colors">
-            <div>
-              <span className="text-[8px] sm:text-[10px] font-bold text-amber-400 uppercase tracking-wider sm:tracking-widest truncate">This Month</span>
-              <div className="mt-1 sm:mt-1.5 flex flex-col">
-                <span className="text-base sm:text-xl font-black text-white">₹{monthSalesSum.toFixed(0)}</span>
-                <span className="text-[8px] sm:text-[10px] text-gray-550 font-bold whitespace-nowrap mt-0.5">{monthSalesCount} bills</span>
-              </div>
-            </div>
-            <div className="mt-2 pt-1.5 border-t border-gray-800/80 flex flex-col text-[8px] sm:text-xs">
-              <span className="text-gray-400">Profit:</span>
-              <span className={`font-bold truncate ${monthProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                ₹{monthProfit.toFixed(0)}
+            <span className="text-[8px] sm:text-[10px] font-bold text-amber-400 uppercase tracking-wider sm:tracking-widest truncate">This Month</span>
+            <div className="mt-1 sm:mt-1.5 flex flex-col">
+              <span className="text-base sm:text-xl font-black text-white">₹{monthSalesSum.toFixed(0)}</span>
+              <span className="text-[8px] sm:text-[10px] text-gray-550 font-bold whitespace-nowrap mt-0.5">
+                {monthSalesCount} bills • <span className={monthProfit >= 0 ? 'text-emerald-400' : 'text-rose-455'}>₹{monthProfit.toFixed(0)} profit</span>
               </span>
             </div>
           </div>
