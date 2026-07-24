@@ -64,6 +64,7 @@ model Shop {
   bills            Bill[]
   owner            User              @relation("ShopOwner", fields: [ownerId], references: [id])
   staffMemberships StaffMembership[]
+  staffInvitations StaffInvitation[]
   // New features
   workers          Worker[]
   products         Product[]
@@ -262,4 +263,15 @@ model BillEntry {
   bill      Bill     @relation(fields: [billId], references: [id])
 
   @@index([billId])
+}
+
+model StaffInvitation {
+  id        String   @id @default(cuid())
+  shopId    String
+  email     String
+  createdAt DateTime @default(now())
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, email])
+  @@index([email])
 }
