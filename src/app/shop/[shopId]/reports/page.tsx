@@ -221,38 +221,38 @@ export default async function ReportsPage(props: {
         </div>
 
         {/* Sales Performance Dashboard Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
           {/* Today Card */}
-          <div className="p-4.5 bg-gray-850 border border-gray-800 rounded-2xl flex flex-col justify-between shadow-md hover:border-gray-700 transition-colors">
-            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">{"Today's Sales"}</span>
-            <div className="mt-1.5 flex items-baseline justify-between">
-              <span className="text-xl font-black text-white">₹{todaySalesSum.toFixed(2)}</span>
-              <span className="text-[10px] text-gray-500 font-bold">{todaySalesCount} bills</span>
+          <div className="p-2.5 sm:p-4.5 bg-gray-850 border border-gray-800 rounded-xl sm:rounded-2xl flex flex-col justify-between shadow-md hover:border-gray-700 transition-colors">
+            <span className="text-[8px] sm:text-[10px] font-bold text-emerald-400 uppercase tracking-wider sm:tracking-widest truncate">{"Today's Sales"}</span>
+            <div className="mt-1 sm:mt-1.5 flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5">
+              <span className="text-xs sm:text-xl font-black text-white truncate">₹{todaySalesSum.toFixed(0)}</span>
+              <span className="text-[8px] sm:text-[10px] text-gray-500 font-semibold sm:font-bold whitespace-nowrap">{todaySalesCount} bills</span>
             </div>
           </div>
 
           {/* Yesterday Card */}
-          <div className="p-4.5 bg-gray-850 border border-gray-800 rounded-2xl flex flex-col justify-between shadow-md hover:border-gray-700 transition-colors">
-            <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">{t('reports.yesterdaySales')}</span>
-            <div className="mt-1.5 flex items-baseline justify-between">
-              <span className="text-xl font-black text-white">₹{yesterdaySalesSum.toFixed(2)}</span>
-              <span className="text-[10px] text-gray-500 font-bold">{yesterdaySalesCount} bills</span>
+          <div className="p-2.5 sm:p-4.5 bg-gray-850 border border-gray-800 rounded-xl sm:rounded-2xl flex flex-col justify-between shadow-md hover:border-gray-700 transition-colors">
+            <span className="text-[8px] sm:text-[10px] font-bold text-indigo-400 uppercase tracking-wider sm:tracking-widest truncate">{t('reports.yesterdaySales')}</span>
+            <div className="mt-1 sm:mt-1.5 flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5">
+              <span className="text-xs sm:text-xl font-black text-white truncate">₹{yesterdaySalesSum.toFixed(0)}</span>
+              <span className="text-[8px] sm:text-[10px] text-gray-500 font-semibold sm:font-bold whitespace-nowrap">{yesterdaySalesCount} bills</span>
             </div>
           </div>
 
           {/* This Month Card */}
-          <div className="p-4.5 bg-gray-850 border border-gray-800 rounded-2xl flex flex-col justify-between shadow-md hover:border-gray-700 transition-colors">
+          <div className="p-2.5 sm:p-4.5 bg-gray-850 border border-gray-800 rounded-xl sm:rounded-2xl flex flex-col justify-between shadow-md hover:border-gray-700 transition-colors">
             <div>
-              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">This Month</span>
-              <div className="mt-1.5 flex items-baseline justify-between">
-                <span className="text-xl font-black text-white">₹{monthSalesSum.toFixed(2)}</span>
-                <span className="text-[10px] text-gray-500 font-bold">{monthSalesCount} bills</span>
+              <span className="text-[8px] sm:text-[10px] font-bold text-amber-400 uppercase tracking-wider sm:tracking-widest truncate">This Month</span>
+              <div className="mt-1 sm:mt-1.5 flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5">
+                <span className="text-xs sm:text-xl font-black text-white truncate">₹{monthSalesSum.toFixed(0)}</span>
+                <span className="text-[8px] sm:text-[10px] text-gray-500 font-semibold sm:font-bold whitespace-nowrap">{monthSalesCount} bills</span>
               </div>
             </div>
-            <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex justify-between items-center text-xs">
+            <div className="mt-1.5 sm:mt-2.5 pt-1.5 sm:pt-2 border-t border-gray-800/80 flex flex-col sm:flex-row sm:justify-between sm:items-center text-[8px] sm:text-xs gap-0.5">
               <span className="text-gray-400">Profit:</span>
-              <span className={`font-bold ${monthProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                ₹{monthProfit.toFixed(2)}
+              <span className={`font-bold truncate ${monthProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                ₹{monthProfit.toFixed(0)}
               </span>
             </div>
           </div>
