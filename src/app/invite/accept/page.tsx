@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { redirect } from 'next/navigation';
 import { acceptStaffInvitation, declineStaffInvitation } from '@/app/actions/staff';
 import { Store, UserCheck, ShieldAlert } from 'lucide-react';
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 
 export default async function AcceptInvitePage(props: {
@@ -60,6 +61,9 @@ export default async function AcceptInvitePage(props: {
   // 2. Check if logged in. If not, redirect to Stack sign-in/sign-up.
   const user = await stackServerApp.getUser();
   if (!user) {
+    // Set a cookie with the pending invitation ID
+    const cookieStore = await cookies();
+    cookieStore.set('pending_invite_id', invitationId, { path: '/', maxAge: 3600 });
     // Redirect to sign in, preserving the redirect to this invite link after sign-up/sign-in
     redirect(`/handler/sign-in?next=${encodeURIComponent(`/invite/accept?id=${invitationId}`)}`);
   }

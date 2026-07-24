@@ -119,8 +119,22 @@ function WelcomeNewUser() {
   );
 }
 
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+
 export default async function Home() {
   const user = await stackServerApp.getUser();
+
+  if (user) {
+    const cookieStore = await cookies();
+    const pendingInviteId = cookieStore.get('pending_invite_id')?.value;
+    if (pendingInviteId) {
+      // Clear cookie to prevent loops
+      cookieStore.delete('pending_invite_id');
+      redirect(`/invite/accept?id=${pendingInviteId}`);
+    }
+  }
+
   const userName = user ? (user.displayName || user.primaryEmail?.split('@')[0] || 'User') : 'User';
   const { ownedShops, staffShops } = user ? await getShopsForUser() : { ownedShops: [], staffShops: [] };
   const hasShops = ownedShops.length > 0 || staffShops.length > 0;
