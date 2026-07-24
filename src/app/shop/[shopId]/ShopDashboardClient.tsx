@@ -9,7 +9,7 @@ import AddBillClient from './AddBillClient';
 import WorkerPinModal from '@/components/WorkerPinModal';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { addWorker } from '@/app/actions/kirana';
-import { addStaffToShop, removeStaffFromShop, cancelStaffInvitation } from '@/app/actions/staff';
+import { addStaffToShop, removeStaffFromShop, cancelStaffInvitation, inviteStaffByPhone } from '@/app/actions/staff';
 import { useSearchParams } from 'next/navigation';
 import { ENABLE_CREDIT_CUSTOMER, ENABLE_SUPPLIER_LEDGER, ENABLE_EXPENSES } from '@/lib/features';
 import { 
@@ -96,11 +96,12 @@ export default function ShopDashboardClient({
 
   // Local state for modals & forms
   const [showAddWorker, setShowAddWorker] = useState(false);
-  const [showManageStaff, setShowManageStaff] = useState(false);
+  const [showManageStaff, setShowManageStaff] = useState(!!notice);
   const [isOpen, setIsOpen] = useState(false);
   
   // Controlled staff invite state
   const [staffPhoneInput, setStaffPhoneInput] = useState('');
+  const [staffEmailInput, setStaffEmailInput] = useState('');
 
   // Passcode modal states
   const [showSetPinModal, setShowSetPinModal] = useState(false);
@@ -426,19 +427,46 @@ export default function ShopDashboardClient({
                 onClick={() => setShowManageStaff(!showManageStaff)}
                 className="w-full flex items-center justify-between text-left text-sm font-bold text-gray-400 uppercase tracking-wider"
               >
-                <span>Remote Staff (WhatsApp Invite)</span>
+                <span>Remote Staff Management</span>
                 <UserPlus className="h-4 w-4 text-indigo-400" />
               </button>
 
               {showManageStaff && (
                 <div className="space-y-4 pt-2 border-t border-gray-800 animate-in slide-in-from-top-2 duration-200">
-                  {/* Form to Add Staff */}
-                  <form action={addStaffToShop} className="space-y-3">
+                  {/* Form 1: Add Directly by Email */}
+                  <form action={addStaffToShop} className="space-y-2">
+                    <input type="hidden" name="shopId" value={shop.id} />
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase">
+                      Option A: Add Directly by Email (For registered users)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        name="email"
+                        required
+                        value={staffEmailInput}
+                        onChange={(e) => setStaffEmailInput(e.target.value)}
+                        placeholder="Staff Email (e.g. helper@gmail.com)"
+                        className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
+                      />
+                      <button
+                        type="submit"
+                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-750 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shrink-0"
+                      >
+                        Add Directly
+                      </button>
+                    </div>
+                  </form>
+
+                  <div className="border-t border-gray-800/40 my-3" />
+
+                  {/* Form 2: Add Staff by Phone Number */}
+                  <form action={inviteStaffByPhone} className="space-y-2">
                     <input type="hidden" name="shopId" value={shop.id} />
                     
                     <div className="flex items-center justify-between">
                       <label className="block text-[10px] font-bold text-gray-500 uppercase">
-                        Add Staff by Phone Number
+                        Option B: Invite by Phone (WhatsApp Link)
                       </label>
                     </div>
 
@@ -454,7 +482,7 @@ export default function ShopDashboardClient({
                       />
                       <button
                         type="submit"
-                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shrink-0"
+                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shrink-0"
                       >
                         Generate Invite
                       </button>

@@ -7,6 +7,65 @@ import { redirect } from 'next/navigation';
 
 export async function addStaffToShop(formData: FormData) {
   const shopId = formData.get('shopId') as string;
+  const staffEmail = formData.get('email') as string;
+
+  if (!shopId || !staffEmail) {
+    return redirect(`/shop/${shopId}?notice=${encodeURIComponent('Shop ID and staff email are required.')}&status=error`);
+  }
+
+  // 1. Security: Verify the current user is the owner of the shop
+  const owner = await stackServerApp.getUser({ or: 'throw' });
+  const shop = await prisma.shop.findFirst({
+    where: {
+      id: shopId,
+      ownerId: owner.id, // This ensures they own the shop
+    },
+  });
+
+  if (!shop) {
+    return redirect(`/shop/${shopId}?notice=${encodeURIComponent('Not authorized or shop not found.')}&status=error`);
+  }
+
+  // 2. Find the user to add as staff
+  const staffUser = await prisma.user.findUnique({
+    where: { email: staffEmail },
+  });
+
+  if (!staffUser) {
+    return redirect(`/shop/${shop.id}?notice=${encodeURIComponent('User with that email does not exist in the system.')}&status=error`);
+  }
+
+  // Prevent adding the shop owner as staff
+  if (staffUser.id === shop.ownerId) {
+    return redirect(`/shop/${shop.id}?notice=${encodeURIComponent('Cannot add the shop owner as staff.')}&status=warning`);
+  }
+
+  // Check if the user is already a staff member
+  const existingMembership = await prisma.staffMembership.findFirst({
+    where: {
+      userId: staffUser.id,
+      shopId: shop.id,
+    },
+  });
+
+  if (existingMembership) {
+    return redirect(`/shop/${shop.id}?notice=${encodeURIComponent('This user is already a staff member.')}&status=warning`);
+  }
+
+  // 3. Create the staff membership
+  await prisma.staffMembership.create({
+    data: {
+      userId: staffUser.id,
+      shopId: shop.id,
+    },
+  });
+
+  revalidatePath(`/shop/${shop.id}`);
+  return redirect(`/shop/${shop.id}?notice=${encodeURIComponent('Staff member added successfully.')}&status=success`);
+}
+
+export async function inviteStaffByPhone(formData: FormData) {
+  const shopId = formData.get('shopId') as string;
   const rawPhone = formData.get('phone') as string;
 
   if (!shopId || !rawPhone) {
@@ -23,7 +82,7 @@ export async function addStaffToShop(formData: FormData) {
   const shop = await prisma.shop.findFirst({
     where: {
       id: shopId,
-      ownerId: owner.id, // This ensures they own the shop
+      ownerId: owner.id,
     },
   });
 
@@ -46,7 +105,6 @@ export async function addStaffToShop(formData: FormData) {
     },
   });
 
-  // 3. Refresh page to show the new invitation
   revalidatePath(`/shop/${shop.id}`);
   return redirect(`/shop/${shop.id}?notice=${encodeURIComponent('Invitation generated successfully. Click Send below to share via WhatsApp.')}&status=success`);
 }
@@ -150,11 +208,6 @@ export async function removeStaffFromShop(formData: FormData) {
   const shop = await prisma.shop.findFirst({ where: { id: shopId, ownerId: owner.id }, select: { id: true, ownerId: true } });
   if (!shop) {
     return redirect(`/shop/${shopId}?notice=${encodeURIComponent('Not authorized or shop not found.')}&status=error`);
-  }
-
-  // Safety: don't allow removing the owner; owners are not in staffMemberships, but guard anyway
-  if (userId === shop.ownerId) {
-    return redirect(`/shop/${shopId}?notice=${encodeURIComponent('Cannot remove the shop owner.')}&status=warning`);
   }
 
   const deleted = await prisma.staffMembership.deleteMany({ where: { shopId, userId } });
